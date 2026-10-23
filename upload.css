@@ -1,0 +1,23 @@
+/* Only the explicit Browse button activates the hidden file input. */
+.yabs-file-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #455b4c;
+  border-radius: 7px;
+  background: #101813;
+}
+
+.yabs-file-row button {
+  flex-shrink: 0;
+  background: #2c4535;
+  color: #d4e7db;
+}
+
+.yabs-file-name {
+  min-width: 0;
+  color: #9fb6a7;
+  overflow-wrap: anywhere;
+}
