@@ -1,0 +1,11 @@
+{
+  "serverName": "le4-0-105-238louhi.pulsedmedia.com",
+  "processorName": "Intel(R) Core(TM) i7-12700",
+  "coreCount": 20,
+  "processorMhz": 2100,
+  "ramGiB": 32,
+  "swapGiB": 8,
+  "storageTiB": 4,
+  "qsv": true,
+  "replace": false
+}

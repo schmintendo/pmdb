@@ -5,6 +5,7 @@ import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDatabase } from './database.mjs';
 import { InputError, parseSubmission, parseLimitedJson } from './yabs.mjs';
+import { parseRawSubmission } from './raw.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const MAX_BODY = 1024 * 1024;
@@ -34,7 +35,7 @@ export function createApp({ databasePath, uploadToken = '', distPath, uploadLimi
       if (url.pathname === '/api/health' && req.method === 'GET') return json(res, 200, { ok: true });
       if (url.pathname === '/api/config' && req.method === 'GET') return json(res, 200, { uploadsEnabled: Boolean(token) });
       if (url.pathname === '/api/servers' && req.method === 'GET') return json(res, 200, db.list());
-      if (url.pathname === '/api/servers' && req.method === 'POST') {
+      if (['/api/servers', '/api/servers/raw'].includes(url.pathname) && req.method === 'POST') {
         const now = Date.now();
         for (const [key, entry] of attempts) if (entry.until <= now) attempts.delete(key);
         const ip = req.socket.remoteAddress || 'unknown';
@@ -57,7 +58,7 @@ export function createApp({ databasePath, uploadToken = '', distPath, uploadLimi
         }
         let body;
         try { body = parseLimitedJson(Buffer.concat(chunks).toString('utf8')); } catch { throw new InputError('The submission is not valid JSON.'); }
-        const record = parseSubmission(body);
+        const record = url.pathname === '/api/servers/raw' ? parseRawSubmission(body) : parseSubmission(body);
         const result = db.save(record, body.replace);
         return json(res, result.replaced ? 200 : 201, { ...result, serverName: record.serverName });
       }

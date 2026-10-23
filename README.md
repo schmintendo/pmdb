@@ -69,6 +69,94 @@ Re-uploading the same normalized hostname requires **Replace existing server wit
 
 Intel QuickSync is a manual assertion, not verification that the GPU is exposed or usable. YABS cores are the logical cores/vCPUs it reports. Frequency is the value YABS reports, not a live clock measurement; unknown frequency is shown as a dash. Storage follows YABS's mounted-filesystem total, not an independent physical-drive inventory. Its legacy JSON `disk_units: "KB"` comes from df's default 1024-byte blocks and is interpreted accordingly. RAM, SWAP, and storage are stored numerically in bytes and sorted numerically.
 
+## Submit a row directly with the API
+
+You can submit one server as JSON without a YABS file:
+
+```text
+POST https://pmdb.fyi/api/servers/raw
+Content-Type: application/json
+Authorization: Bearer YOUR_UPLOAD_KEY
+```
+
+Save your row as `server-row.json`. An example is included at
+`examples/server-row.json`:
+
+```json
+{
+  "serverName": "le4-0-105-238louhi.pulsedmedia.com",
+  "processorName": "Intel(R) Core(TM) i7-12700",
+  "coreCount": 20,
+  "processorMhz": 2100,
+  "ramGiB": 32,
+  "swapGiB": 8,
+  "storageTiB": 4,
+  "qsv": true,
+  "replace": false
+}
+```
+
+Submit from Linux/macOS with the same upload key used by the website:
+
+```sh
+read -rsp 'Upload key: ' PMDB_UPLOAD_KEY
+printf '\n'
+curl --fail-with-body --show-error \
+  --request POST 'https://pmdb.fyi/api/servers/raw' \
+  --header "Authorization: Bearer $PMDB_UPLOAD_KEY" \
+  --header 'Content-Type: application/json' \
+  --data-binary @server-row.json
+unset PMDB_UPLOAD_KEY
+```
+
+For the included example, use `--data-binary @examples/server-row.json`. In
+PowerShell, use `curl.exe` and supply the same URL, headers, and JSON file.
+
+| Field | Required | Format |
+| --- | --- | --- |
+| `serverName` | Yes | Hostname; normalized to lowercase |
+| `processorName` | Yes | Nonempty text, at most 300 characters |
+| `coreCount` | Yes | Positive integer (reported logical cores/vCPUs) |
+| `processorMhz` | No | Positive number in MHz; omit or use `null` if unknown |
+| `ramGiB` | Yes | Positive number in GiB |
+| `swapGiB` | No | Nonnegative number in GiB; `0` means no swap, omitted/`null` means unknown |
+| `storageTiB` | Yes | Nonnegative number in TiB |
+| `qsv` | Yes | JSON `true` or `false` for Intel QuickSync |
+| `replace` | No | Boolean, defaults to `false` |
+
+Numeric fields must be JSON numbers, not quoted strings or values with units.
+Capacities accept decimals and are rounded to the nearest byte, within the
+safe integer range. No extra fields or arrays are accepted. Datacenter and
+the highlighted friendly name continue to be derived from the hostname.
+
+New rows return HTTP `201` and `{"replaced":false,"serverName":"..."}`.
+Submitting an existing hostname returns `409` unless you set `"replace": true`.
+Replacement returns `200` with `"replaced":true`. Replacement supplies the
+entire row; it is not a partial edit, and omitted optional values become
+unknown. `replace: true` also creates a row if the hostname does not yet exist.
+YABS uploads and direct rows refer to the same records, so either method can
+explicitly replace a row created by the other method.
+
+Invalid fields or malformed JSON return `400`; an invalid/missing upload key
+returns `401`; wrong content type returns `415`; oversized requests return
+`413`; rate limiting returns `429`; disabled uploads return `503`. Errors have
+the JSON shape `{"error":"..."}`. Both submission endpoints share the same
+authentication, request/depth limits and rate-limit bucket. Reads remain
+public. These manually supplied values are validated but not independently
+verified against hardware. Click Refresh on the website to see the row.
+
+The existing `POST /api/servers` YABS endpoint and website upload form work as
+before. This addition is for scripts, curl, or other API clients; it does not
+add a manual-entry form to the website.
+
+To deploy this addition on an existing native installation, back up your
+database, copy the updated `server/index.mjs` and new `server/raw.mjs` into
+your project, then restart the running Node process. For an interactive
+`npm start` session, stop it with Ctrl+C and run `npm start` again. For systemd
+or another process manager, restart your application's service. No frontend
+rebuild, new dependencies, Caddy change or database migration is needed.
+Docker installations need `docker compose up -d --build` as usual.
+
 ## Deploy on a Linux VM with Docker Compose
 
 Install Docker Engine and the Compose plugin on your VM. Create `.env` and an upload key as above, then:
@@ -128,7 +216,7 @@ For restore, stop the app, preserve the existing database, and restore a backup 
 ## Internet-facing protections
 
 - Uploads require a server-side bearer key. It is checked with a constant-time comparison, excluded from the frontend bundle, and not written to browser storage or logs. Reads are public by design; anyone who can reach the site can read the nine displayed fields.
-- The API accepts only the four expected submission fields, with a real boolean for Intel QuickSync. Hostnames, required hardware fields, units, numbers, and lengths are validated server-side. Unknown YABS fields are ignored; only the extracted hardware fields and timestamps are persisted. Original upload files and unrelated YABS output are not kept.
+- Each API submission endpoint accepts only its expected fields, with a real boolean for Intel QuickSync. Hostnames, required hardware fields, units, numbers, and lengths are validated server-side. Direct row submissions use explicit GiB/TiB field names and strict JSON number types. Unknown YABS fields are ignored; only the extracted hardware fields and timestamps are persisted. Original upload files and unrelated YABS output are not kept.
 - JSON request bodies are limited to 1 MiB, JSON nesting to 32 levels, and the browser file chooser to 800 KiB. HTTP request/header timeouts are configured. Native JSON parsing is used; there is no eval, shell execution, or downloading URLs supplied by users.
 - Upload attempts are limited to 30 per source connection IP per 10 minutes, including failed authentication. Forwarded IP headers are not trusted. Behind a reverse proxy, clients share that proxy's bucket. Limits are in memory and reset on restart; this is basic abuse protection, not protection from a large distributed attack.
 - Every SQL value uses a prepared statement. Only fixed application SQL runs. SQLite strict columns, transactions, uniqueness, and duplicate-upload checks protect data consistency. SQLite schema trust is disabled.
@@ -145,4 +233,4 @@ npm run build
 npm audit
 ```
 
-The tests exercise YABS parsing, both datacenter examples, numeric conversions, invalid data, authentication, duplicates, persistence, size/depth limits, rate limiting, and isolation of credentials/database files. The code includes example deployment files; an actual VM, domain, and Docker deployment must be verified in your environment.
+The tests exercise YABS and direct row parsing, both datacenter examples, numeric conversions, invalid data, authentication, cross-format replacements, duplicates, persistence, size/depth limits, shared rate limiting, and isolation of credentials/database files. The code includes example deployment files; an actual VM, domain, and Docker deployment must be verified in your environment.
