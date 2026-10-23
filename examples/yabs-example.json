@@ -1,0 +1,5 @@
+{
+  "version": "example-only",
+  "cpu": { "model": "Intel(R) Core(TM) i7-12700", "cores": 20, "freq": "2100.000 MHz" },
+  "mem": { "ram": 33554432, "ram_units": "KiB", "swap": 8388608, "swap_units": "KiB", "disk": 976562500, "disk_units": "KB" }
+}

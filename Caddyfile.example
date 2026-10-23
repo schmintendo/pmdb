@@ -1,0 +1,7 @@
+# Replace this hostname; point its DNS at the VM and allow inbound 80/443.
+servers.example.com {
+    request_body {
+        max_size 1MB
+    }
+    reverse_proxy 127.0.0.1:3000
+}

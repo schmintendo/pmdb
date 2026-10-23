@@ -1,0 +1,26 @@
+services:
+  catalog:
+    build: .
+    restart: unless-stopped
+    environment:
+      UPLOAD_TOKEN: ${UPLOAD_TOKEN:?Set UPLOAD_TOKEN in .env}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - catalog-data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 64
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  catalog-data:
