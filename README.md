@@ -1,4 +1,4 @@
-# pmdb.fyi — VM edition
+# pmdb.fyi
 
 A dark React + TanStack Table website with uploads, a Node.js API, and SQLite storage. Exactly nine columns:
 
