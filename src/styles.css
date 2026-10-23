@@ -63,7 +63,7 @@ a:focus-visible, .table-scroll:focus-visible {
 .brand-dot { color: #8fc3a0; }
 .demo-label {
   color: #a0b2a5;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 1.8px;
   border-left: 1px solid #39473d;
   padding-left: 26px;
@@ -195,3 +195,15 @@ td:nth-child(2) { white-space: normal; min-width: 210px; max-width: 360px; line-
 .upload-button { justify-self: end; white-space: nowrap; }
 .yabs-command { display: block; font-family: var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; background: #101813; border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-top: 6px; user-select: all; }
 @media (max-width: 540px) { .upload-button { justify-self: stretch; } }
+
+@media (min-width: 900px) {
+  main {
+    max-width: none;
+    width: 100%;
+    padding: 32px 30px 24px;
+  }
+
+  .topbar {
+    padding: 0 30px;
+  }
+}

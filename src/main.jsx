@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table';
 import './styles.css';
+import './upload.css';
 
 const displayNumber = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
 const gib = value => `${displayNumber.format(value / 1024 ** 3)} GiB`;
@@ -31,6 +32,7 @@ async function api(url, options) {
 
 function UploadDialog({ onClose, onSaved }) {
   const ref = useRef(null);
+  const fileInputRef = useRef(null);
   const [serverName, setServerName] = useState('');
   const [qsv, setQsv] = useState('');
   const [uploadKey, setUploadKey] = useState('');
@@ -60,7 +62,15 @@ function UploadDialog({ onClose, onSaved }) {
     <form onSubmit={submit}>
       <div className="dialog-heading"><div><h2 id="upload-title">Upload a server</h2><p>Import hardware details from a YABS result.</p></div><button type="button" aria-label="Close upload" onClick={onClose} disabled={busy}>×</button></div>
       <label className="form-field">Server Name<input autoFocus required maxLength={253} value={serverName} onChange={e => setServerName(e.target.value)} placeholder="le0-000-000name.pulsedmedia.com" autoComplete="off" disabled={busy} /><small>Use the hostname. Datacenter: <strong>{dc}</strong></small></label>
-      <label className="form-field">YABS results<input required type="file" accept=".json,.txt,.log,application/json,text/plain" onChange={e => setFile(e.target.files[0] || null)} disabled={busy} /><small>YABS JSON:<code className="yabs-command">curl -sL yabs.sh | bash -s -- -figw yabs.json</code></small></label>
+      <div className="form-field" role="group" aria-labelledby="yabs-results-label">
+        <span id="yabs-results-label">YABS results</span>
+        <input ref={fileInputRef} id="yabs-file" hidden type="file" accept=".json,.txt,.log,application/json,text/plain" aria-label="YABS results file" onChange={e => setFile(e.target.files[0] || null)} disabled={busy} />
+        <div className="yabs-file-row">
+          <button type="button" aria-controls="yabs-file" aria-describedby="yabs-file-name" onClick={() => fileInputRef.current?.click()} disabled={busy}>Browse…</button>
+          <span id="yabs-file-name" className="yabs-file-name" role="status">{file?.name || 'No file selected'}</span>
+        </div>
+        <small>YABS JSON:<code className="yabs-command">curl -sL yabs.sh | bash -s -- -figw yabs.json</code></small>
+      </div>
       <label className="form-field">Intel QuickSync<select required value={qsv} onChange={e => setQsv(e.target.value)} disabled={busy}><option value="">Choose manually…</option><option value="yes">Yes</option><option value="no">No</option></select><small>Provided by you; this is not inferred from the processor name.</small></label>
       <label className="form-field">Upload key<input type="password" required value={uploadKey} onChange={e => setUploadKey(e.target.value)} autoComplete="off" disabled={busy} /><small>Ask the site administrator for the upload key.</small></label>
       <label className="checkbox-row"><input type="checkbox" checked={replace} onChange={e => setReplace(e.target.checked)} disabled={busy} />Replace existing server with this name</label>
@@ -110,7 +120,7 @@ function App() {
   const activeFilters = Boolean(globalFilter || columnFilters.length);
   function reset() { setGlobalFilter(''); setColumnFilters([]); table.setPageIndex(0); }
   return <div className="app">
-    <header className="topbar"><a className="brand" href="./"><span className="brand-mark" aria-hidden="true">▦</span>pmdb<span className="brand-dot">.</span>fyi</a><span className="demo-label">A database of PulsedMedia Nodes</span></header>
+    <header className="topbar"><a className="brand" href="./"><span className="brand-mark" aria-hidden="true">▦</span>pmdb<span className="brand-dot">.</span>fyi</a><span className="demo-label">A DATABASE OF PULSEDMEDIA NODES</span></header>
     <main>
       <section className="stats" aria-label="Catalog overview">
         <div><span>Servers</span><strong>{data.length}<small>in the catalog</small></strong></div>
@@ -137,7 +147,7 @@ function App() {
         </div>
         <footer className="pagination"><span role="status">{count ? `${pagination.pageIndex * pagination.pageSize + 1}–${pagination.pageIndex * pagination.pageSize + rows.length}` : '0'} of {count} servers</span><div className="page-controls"><label htmlFor="page-size">Rows per page</label><select id="page-size" value={pagination.pageSize} onChange={e => table.setPageSize(Number(e.target.value))}>{[10, 25, 50, 100].map(size => <option key={size} value={size}>{size}</option>)}</select><span>Page {count ? pagination.pageIndex + 1 : 0} of {table.getPageCount()}</span><button aria-label="Previous page" disabled={!table.getCanPreviousPage()} onClick={() => table.previousPage()}>←</button><button aria-label="Next page" disabled={!table.getCanNextPage()} onClick={() => table.nextPage()}>→</button></div></footer>
       </section>
-      <footer className="page-footer"><span>RAM and SWAP in GiB · Storage in TiB · Frequency as reported by YABS</span><span>{!loading && !uploadsEnabled ? 'Uploads are currently unavailable.' : 'Intel QuickSync is manually reported.'}</span></footer>
+      <footer className="page-footer"><span>All values, except for Intel QuickSync, as reported by YABS</span><span>{!loading && !uploadsEnabled ? 'Uploads are currently unavailable.' : 'Blatantly vibe-coded by schmintendo.'}</span></footer>
     </main>
     {uploadOpen && <UploadDialog onClose={() => setUploadOpen(false)} onSaved={saved} />}
   </div>;
