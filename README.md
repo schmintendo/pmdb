@@ -7,7 +7,7 @@ A dark React + TanStack Table website with uploads, a Node.js API, and SQLite st
 3. Core count — YABS
 4. Processor MHz — YABS
 5. RAM — YABS, displayed in GiB
-6. SWAP — YABS, displayed in GiB (missing values show a dash)
+6. SWAP — YABS, displayed in GiB
 7. Total storage — YABS, displayed in TiB
 8. Datacenter — the prefix before the first regular hyphen in the hostname
 9. Intel QuickSync — Yes/No, chosen manually during upload
