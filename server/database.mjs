@@ -17,6 +17,7 @@ export function openDatabase(filename) {
       storage_bytes INTEGER NOT NULL,
       swap_bytes INTEGER CHECK(swap_bytes >= 0),
       qsv INTEGER NOT NULL CHECK(qsv IN (0,1)),
+      kvm INTEGER CHECK(kvm IN (0,1)),
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     ) STRICT;`);
@@ -24,13 +25,17 @@ export function openDatabase(filename) {
   if (!db.prepare('PRAGMA table_info(servers)').all().some(column => column.name === 'swap_bytes')) {
     db.exec('ALTER TABLE servers ADD COLUMN swap_bytes INTEGER CHECK(swap_bytes >= 0)');
   }
+  // Earlier uploads did not retain VM information; leave those rows unknown.
+  if (!db.prepare('PRAGMA table_info(servers)').all().some(column => column.name === 'kvm')) {
+    db.exec('ALTER TABLE servers ADD COLUMN kvm INTEGER CHECK(kvm IN (0,1))');
+  }
   const select = db.prepare('SELECT * FROM servers ORDER BY server_name');
   const exists = db.prepare('SELECT 1 FROM servers WHERE server_name = ?');
-  const insert = db.prepare(`INSERT INTO servers (server_name, processor_name, core_count, processor_mhz, ram_bytes, storage_bytes, swap_bytes, qsv, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  const insert = db.prepare(`INSERT INTO servers (server_name, processor_name, core_count, processor_mhz, ram_bytes, storage_bytes, swap_bytes, qsv, kvm, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(server_name) DO UPDATE SET processor_name=excluded.processor_name,
     core_count=excluded.core_count, processor_mhz=excluded.processor_mhz,
     ram_bytes=excluded.ram_bytes, storage_bytes=excluded.storage_bytes, swap_bytes=excluded.swap_bytes,
-    qsv=excluded.qsv, updated_at=excluded.updated_at`);
+    qsv=excluded.qsv, kvm=excluded.kvm, updated_at=excluded.updated_at`);
   return {
     list() {
       return select.all().map(row => ({
@@ -38,6 +43,7 @@ export function openDatabase(filename) {
         coreCount: row.core_count, processorMhz: row.processor_mhz,
         ramBytes: row.ram_bytes, storageBytes: row.storage_bytes, swapBytes: row.swap_bytes,
         datacenter: datacenterFor(row.server_name), qsv: Boolean(row.qsv),
+        kvm: row.kvm == null ? null : Boolean(row.kvm),
       }));
     },
     save(record, replace = false) {
@@ -46,7 +52,7 @@ export function openDatabase(filename) {
         const existing = Boolean(exists.get(record.serverName));
         if (existing && !replace) throw new InputError('This server already exists. Enable “Replace existing server” to update it.', 409);
         const now = new Date().toISOString();
-        insert.run(record.serverName, record.processorName, record.coreCount, record.processorMhz, record.ramBytes, record.storageBytes, record.swapBytes ?? null, Number(record.qsv), now, now);
+        insert.run(record.serverName, record.processorName, record.coreCount, record.processorMhz, record.ramBytes, record.storageBytes, record.swapBytes ?? null, Number(record.qsv), record.kvm == null ? null : Number(record.kvm), now, now);
         db.exec('COMMIT');
         return { replaced: existing };
       } catch (error) { db.exec('ROLLBACK'); throw error; }

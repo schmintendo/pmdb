@@ -1,6 +1,6 @@
 # pmdb.fyi
 
-A dark React + TanStack Table website with uploads, a Node.js API, and SQLite storage. Exactly nine columns:
+A dark React + TanStack Table website with uploads, a Node.js API, and SQLite storage. Exactly ten columns:
 
 1. Server Name — the hostname supplied in the upload form
 2. Processor name — YABS
@@ -10,7 +10,8 @@ A dark React + TanStack Table website with uploads, a Node.js API, and SQLite st
 6. SWAP — YABS, displayed in GiB
 7. Total storage — YABS, displayed in TiB
 8. Datacenter — the prefix before the first regular hyphen in the hostname
-9. Intel QuickSync — Yes/No, chosen manually during upload
+9. KVM — ✓ for KVM, × for NONE, or — when unknown
+10. Intel QuickSync — Yes/No, chosen manually during upload
 
 `le4-0-105-238louhi.pulsedmedia.com` produces `le4`; `lt5-1-58-111alue.pulsedmedia.com` produces `lt5`. Hostnames are lowercased, with an optional trailing dot removed. A hostname without a hyphen displays Unknown for datacenter.
 
@@ -69,6 +70,27 @@ Re-uploading the same normalized hostname requires **Replace existing server wit
 
 Intel QuickSync is a manual assertion, not verification that the GPU is exposed or usable. YABS cores are the logical cores/vCPUs it reports. Frequency is the value YABS reports, not a live clock measurement; unknown frequency is shown as a dash. Storage follows YABS's mounted-filesystem total, not an independent physical-drive inventory. Its legacy JSON `disk_units: "KB"` comes from df's default 1024-byte blocks and is interpreted accordingly. RAM, SWAP, and storage are stored numerically in bytes and sorted numerically.
 
+## KVM status
+
+The sortable **KVM** column reads the `os.vm` field from YABS JSON:
+
+| YABS report | KVM column | API value |
+| --- | --- | --- |
+| `"os": { "vm": "KVM" }` | ✓ | `"kvm": true` |
+| `"os": { "vm": "NONE" }` | × | `"kvm": false` |
+| Missing or unrecognized VM type | — | `"kvm": null` |
+
+Matching ignores case and surrounding spaces. The CPU's `virt` flag is not
+used: it reports virtualization support rather than whether this node is
+running under KVM. Standard text uploads can supply a `VM Type : KVM` or
+`VM Type : NONE` line as well. Other hypervisor names remain unclassified in
+this KVM-specific column. The symbols have accessible text labels and tooltips.
+
+Existing records initially show **—** because earlier uploads did not retain
+VM information. Re-upload the YABS file with **Replace existing server with
+this name**, or replace the full row through the raw API with an explicit
+`kvm` value, to populate it. Merely refreshing cannot recover discarded data.
+
 ## Submit a row directly with the API
 
 You can submit one server as JSON without a YABS file:
@@ -92,6 +114,7 @@ Save your row as `server-row.json`. An example is included at
   "swapGiB": 8,
   "storageTiB": 4,
   "qsv": true,
+  "kvm": false,
   "replace": false
 }
 ```
@@ -122,6 +145,7 @@ PowerShell, use `curl.exe` and supply the same URL, headers, and JSON file.
 | `swapGiB` | No | Nonnegative number in GiB; `0` means no swap, omitted/`null` means unknown |
 | `storageTiB` | Yes | Nonnegative number in TiB |
 | `qsv` | Yes | JSON `true` or `false` for Intel QuickSync |
+| `kvm` | No | JSON `true` for KVM, `false` for NONE; omitted/`null` means unknown |
 | `replace` | No | Boolean, defaults to `false` |
 
 Numeric fields must be JSON numbers, not quoted strings or values with units.
@@ -149,13 +173,27 @@ The existing `POST /api/servers` YABS endpoint and website upload form work as
 before. This addition is for scripts, curl, or other API clients; it does not
 add a manual-entry form to the website.
 
-To deploy this addition on an existing native installation, back up your
-database, copy the updated `server/index.mjs` and new `server/raw.mjs` into
-your project, then restart the running Node process. For an interactive
-`npm start` session, stop it with Ctrl+C and run `npm start` again. For systemd
-or another process manager, restart your application's service. No frontend
-rebuild, new dependencies, Caddy change or database migration is needed.
-Docker installations need `docker compose up -d --build` as usual.
+To deploy the current version on an existing installation, follow the KVM
+update instructions below. New raw clients can supply `kvm`; older clients
+that omit it still work and store an unknown status. Full-row replacement
+without `kvm` also resets that status to unknown, like the other optional fields.
+
+## Updating to the KVM column
+
+1. Back up your existing SQLite database with `npm run backup`.
+2. Copy the updated application files into your project while keeping your
+   existing `.env` and database. In particular, deploy the YABS parser, raw
+   parser, database module, frontend entry and `src/upload.css` together.
+3. Run `npm run build` to rebuild the table.
+4. Restart the running Node process to load the backend changes. For an
+   interactive `npm start` session, stop it with Ctrl+C and run `npm start`
+   again. For systemd or another process manager, restart the app's service.
+5. Hard-refresh the website. Re-upload older records to populate KVM status.
+
+On startup, SQLite automatically gains a nullable `kvm` column without
+deleting existing rows. Its values are `1`, `0`, or `NULL`. No new dependencies
+or Caddy changes are needed. Docker installations instead deploy with
+`docker compose up -d --build`, which builds the frontend and restarts the app.
 
 ## Deploy on a Linux VM with Docker Compose
 
@@ -215,7 +253,7 @@ For restore, stop the app, preserve the existing database, and restore a backup 
 
 ## Internet-facing protections
 
-- Uploads require a server-side bearer key. It is checked with a constant-time comparison, excluded from the frontend bundle, and not written to browser storage or logs. Reads are public by design; anyone who can reach the site can read the nine displayed fields.
+- Uploads require a server-side bearer key. It is checked with a constant-time comparison, excluded from the frontend bundle, and not written to browser storage or logs. Reads are public by design; anyone who can reach the site can read the ten displayed fields.
 - Each API submission endpoint accepts only its expected fields, with a real boolean for Intel QuickSync. Hostnames, required hardware fields, units, numbers, and lengths are validated server-side. Direct row submissions use explicit GiB/TiB field names and strict JSON number types. Unknown YABS fields are ignored; only the extracted hardware fields and timestamps are persisted. Original upload files and unrelated YABS output are not kept.
 - JSON request bodies are limited to 1 MiB, JSON nesting to 32 levels, and the browser file chooser to 800 KiB. HTTP request/header timeouts are configured. Native JSON parsing is used; there is no eval, shell execution, or downloading URLs supplied by users.
 - Upload attempts are limited to 30 per source connection IP per 10 minutes, including failed authentication. Forwarded IP headers are not trusted. Behind a reverse proxy, clients share that proxy's bucket. Limits are in memory and reset on restart; this is basic abuse protection, not protection from a large distributed attack.
@@ -233,4 +271,4 @@ npm run build
 npm audit
 ```
 
-The tests exercise YABS and direct row parsing, both datacenter examples, numeric conversions, invalid data, authentication, cross-format replacements, duplicates, persistence, size/depth limits, shared rate limiting, and isolation of credentials/database files. The code includes example deployment files; an actual VM, domain, and Docker deployment must be verified in your environment.
+The tests exercise YABS and direct row parsing, KVM detection and migration, both datacenter examples, numeric conversions, invalid data, authentication, cross-format replacements, duplicates, persistence, size/depth limits, shared rate limiting, and isolation of credentials/database files. The code includes example deployment files; an actual VM, domain, and Docker deployment must be verified in your environment.

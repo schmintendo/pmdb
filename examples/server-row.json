@@ -7,5 +7,6 @@
   "swapGiB": 8,
   "storageTiB": 4,
   "qsv": true,
+  "kvm": false,
   "replace": false
 }

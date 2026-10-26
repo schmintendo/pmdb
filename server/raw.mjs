@@ -2,7 +2,7 @@ import { InputError, normalizeHostname } from './yabs.mjs';
 
 const fields = new Set([
   'serverName', 'processorName', 'coreCount', 'processorMhz',
-  'ramGiB', 'swapGiB', 'storageTiB', 'qsv', 'replace',
+  'ramGiB', 'swapGiB', 'storageTiB', 'qsv', 'kvm', 'replace',
 ]);
 
 function numeric(value, label, { integer = false, allowZero = false } = {}) {
@@ -31,6 +31,7 @@ export function parseRawSubmission(body) {
     throw new InputError('Processor name is missing or invalid.');
   }
   if (typeof body.qsv !== 'boolean') throw new InputError('Intel QuickSync (qsv) must be true or false.');
+  if (body.kvm != null && typeof body.kvm !== 'boolean') throw new InputError('KVM (kvm) must be true, false, or null.');
   if (body.replace !== undefined && typeof body.replace !== 'boolean') throw new InputError('Replace must be true or false.');
   return {
     serverName,
@@ -41,5 +42,6 @@ export function parseRawSubmission(body) {
     swapBytes: body.swapGiB == null ? null : capacity(body.swapGiB, 'SWAP (GiB)', 1024 ** 3, true),
     storageBytes: capacity(body.storageTiB, 'Total storage (TiB)', 1024 ** 4, true),
     qsv: body.qsv,
+    kvm: body.kvm ?? null,
   };
 }

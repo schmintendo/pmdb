@@ -85,7 +85,7 @@ test('raw API authenticates, inserts, rejects duplicates, explicitly replaces an
   assert.deepEqual(await replaced.json(), { replaced: true, serverName: row.serverName });
   const records = await (await fetch(base + '/api/servers')).json();
   assert.equal(records.length, 1);
-  assert.equal(Object.keys(records[0]).length, 9);
+  assert.equal(Object.keys(records[0]).length, 10);
   assert.equal(records[0].datacenter, 'le4');
   assert.equal(records[0].ramBytes, 64 * 1024 ** 3);
   assert.equal(records[0].swapBytes, 0);

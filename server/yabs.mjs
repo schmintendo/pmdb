@@ -60,10 +60,20 @@ function textSize(value, label) {
   return bytes(match[1], match[2], label);
 }
 
+function kvmStatus(value) {
+  if (value == null) return null;
+  if (typeof value !== 'string' || value.length > 64 || /[\x00-\x1f\x7f]/.test(value)) {
+    throw new InputError('YABS VM type is invalid.');
+  }
+  const type = value.trim().toUpperCase();
+  // Only these explicit reports establish the meaning of the KVM column.
+  return type === 'KVM' ? true : type === 'NONE' ? false : null;
+}
+
 export function parseYabs(source) {
   if (typeof source !== 'string' || !source.trim()) throw new InputError('Choose a YABS JSON or text results file.');
   const clean = source.replace(/^\uFEFF/, '').replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '').trim();
-  let processorName, coreCount, processorMhz, ramBytes, storageBytes, swapBytes = null;
+  let processorName, coreCount, processorMhz, ramBytes, storageBytes, swapBytes = null, kvm = null;
   if (clean.startsWith('{') || clean.startsWith('[')) {
     let data;
     try { data = parseLimitedJson(clean); } catch { throw new InputError('The YABS JSON file is malformed. Upload the file created with -w yabs.json.'); }
@@ -74,6 +84,7 @@ export function parseYabs(source) {
     ramBytes = bytes(data.mem.ram, data.mem.ram_units, 'RAM');
     if (data.mem.swap !== undefined) swapBytes = bytes(data.mem.swap, data.mem.swap_units, 'SWAP');
     storageBytes = bytes(data.mem.disk, data.mem.disk_units, 'total storage', true);
+    kvm = kvmStatus(data.os?.vm);
   } else {
     const field = pattern => clean.match(pattern)?.[1];
     processorName = field(/^\s*(?:Processor|CPU Model)\s*:\s*(.+)$/im);
@@ -84,9 +95,10 @@ export function parseYabs(source) {
     const swap = field(/^\s*Swap\s*:\s*(.+)$/im);
     if (swap !== undefined) swapBytes = textSize(swap, 'SWAP');
     storageBytes = textSize(field(/^\s*Disk\s*:\s*(.+)$/im), 'total storage');
+    kvm = kvmStatus(field(/^[ \t]*VM Type[ \t]*:[ \t]*(.*)$/im));
   }
   if (typeof processorName !== 'string' || !processorName.trim() || processorName.length > 300 || /[\x00-\x1f]/.test(processorName)) throw new InputError('YABS processor name is missing or invalid.');
-  return { processorName: processorName.trim(), coreCount, processorMhz, ramBytes, storageBytes, swapBytes };
+  return { processorName: processorName.trim(), coreCount, processorMhz, ramBytes, storageBytes, swapBytes, kvm };
 }
 
 export function parseSubmission(body) {

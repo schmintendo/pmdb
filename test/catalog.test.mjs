@@ -90,13 +90,13 @@ async function running(t, options = {}) {
 }
 const post = (url, body, headers = {}) => fetch(url + '/api/servers', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
 
-test('API authentication, upload, nine fields, duplicate protection, replace, and persistence', async t => {
+test('API authentication, upload, ten fields, duplicate protection, replace, and persistence', async t => {
   const { app, url, dbPath, distPath } = await running(t);
   assert.equal((await post(url, payload, { Authorization: 'Bearer wrong' })).status, 401);
   assert.equal((await post(url, payload)).status, 201);
   assert.equal((await post(url, payload)).status, 409);
   let rows = await (await fetch(url + '/api/servers')).json();
-  assert.equal(rows.length, 1); assert.equal(Object.keys(rows[0]).length, 9); assert.equal(rows[0].datacenter, 'le4');
+  assert.equal(rows.length, 1); assert.equal(Object.keys(rows[0]).length, 10); assert.equal(rows[0].datacenter, 'le4');
   assert.equal(rows[0].swapBytes, 8 * 1024 ** 3);
   assert.equal((await post(url, { ...payload, qsv: false, replace: true })).status, 200);
   rows = await (await fetch(url + '/api/servers')).json(); assert.equal(rows[0].qsv, false);

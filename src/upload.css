@@ -21,3 +21,15 @@
   color: #9fb6a7;
   overflow-wrap: anywhere;
 }
+
+.kvm-marker {
+  display: inline-block;
+  min-width: 1em;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+.kvm-yes { color: #a2dcb3; }
+.kvm-no { color: #bdc9c0; }
+.kvm-unknown { color: var(--muted); }
