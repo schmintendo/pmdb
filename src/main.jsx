@@ -11,16 +11,16 @@ const columns = [
   { accessorKey: 'serverName', header: 'Server Name', cell: info => <strong className="server-name">{info.getValue()}</strong> },
   { accessorKey: 'processorName', header: 'Processor name' },
   { accessorKey: 'coreCount', header: 'Core count' },
-  { accessorKey: 'processorMhz', header: 'Processor MHz', sortUndefined: 'last', cell: info => info.getValue() == null ? '—' : displayNumber.format(info.getValue()) },
-  { accessorKey: 'ramBytes', header: 'RAM', cell: info => gib(info.getValue()) },
-  { accessorKey: 'swapBytes', header: 'SWAP', cell: info => info.getValue() == null ? '—' : gib(info.getValue()) },
-  { accessorKey: 'storageBytes', header: 'Total storage', cell: info => tib(info.getValue()) },
-  { accessorKey: 'datacenter', header: 'Datacenter', filterFn: 'equalsString', cell: info => <span className="category">{info.getValue()}</span> },
   { id: 'kvm', accessorFn: row => row.kvm ?? undefined, header: 'KVM', sortingFn: 'basic', sortUndefined: 'last', cell: info => {
     const value = info.getValue();
     const description = value == null ? 'Unknown KVM status' : value ? 'KVM virtual machine' : 'No virtualization reported';
     return <span className={`kvm-marker ${value == null ? 'kvm-unknown' : value ? 'kvm-yes' : 'kvm-no'}`} role="img" aria-label={description} title={description}>{value == null ? '—' : value ? '✓' : '×'}</span>;
   } },
+  { accessorKey: 'processorMhz', header: 'Processor MHz', sortUndefined: 'last', cell: info => info.getValue() == null ? '—' : displayNumber.format(info.getValue()) },
+  { accessorKey: 'ramBytes', header: 'RAM', cell: info => gib(info.getValue()) },
+  { accessorKey: 'swapBytes', header: 'SWAP', cell: info => info.getValue() == null ? '—' : gib(info.getValue()) },
+  { accessorKey: 'storageBytes', header: 'Total storage', cell: info => tib(info.getValue()) },
+  { accessorKey: 'datacenter', header: 'Datacenter', filterFn: 'equalsString', cell: info => <span className="category">{info.getValue()}</span> },
   { accessorKey: 'qsv', header: 'Intel QuickSync', filterFn: (row, id, value) => value === '' || row.getValue(id) === (value === 'yes'), cell: info => <span className={`status ${info.getValue() ? 'available' : 'neutral'}`}><i aria-hidden="true" />{info.getValue() ? 'Yes' : 'No'}</span> },
 ];
 const searchServers = (row, _id, query) => {
