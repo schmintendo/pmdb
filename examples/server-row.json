@@ -1,5 +1,8 @@
 {
   "serverName": "le4-0-105-238louhi.pulsedmedia.com",
+  "username": "exampleuser",
+  "plan": "M10G S",
+  "userCount": 24,
   "processorName": "Intel(R) Core(TM) i7-12700",
   "coreCount": 20,
   "processorMhz": 2100,
@@ -7,6 +10,5 @@
   "swapGiB": 8,
   "storageTiB": 4,
   "qsv": true,
-  "kvm": false,
-  "replace": false
+  "kvm": false
 }

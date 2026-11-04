@@ -7,21 +7,20 @@ import { createApp } from '../server/index.mjs';
 import { openDatabase } from '../server/database.mjs';
 import { parseRawSubmission } from '../server/raw.mjs';
 
-const row = JSON.parse(readFileSync(new URL('../examples/server-row.json', import.meta.url), 'utf8'));
+const row = { ...JSON.parse(readFileSync(new URL('../examples/server-row.json', import.meta.url), 'utf8')), plan: 'Plan 1' };
 const yabsText = readFileSync(new URL('../examples/yabs-example.json', import.meta.url), 'utf8');
-const token = 'raw-api-fixed-test-key-not-a-real-secret';
-const yabs = { serverName: row.serverName, qsv: false, yabsText };
+const yabs = { serverName: row.serverName, qsv: false, yabsText, username: 'tester', plan: 'Plan 1', userCount: 12 };
 
 async function running(t, options = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'pmdb-raw-'));
   const databasePath = join(directory, 'servers.sqlite');
-  const app = createApp({ databasePath, uploadToken: token, ...options });
+  const app = createApp({ databasePath, plans: ['Plan 1', 'Plan 2'], ...options });
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
   t.after(async () => { await app.close(); rmSync(directory, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${app.server.address().port}`;
   const post = (body, { path = '/api/servers/raw', headers = {} } = {}) => fetch(base + path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...headers },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: typeof body === 'string' ? body : JSON.stringify(body),
   });
   return { base, post, databasePath };
@@ -72,14 +71,13 @@ test('direct rows reject missing fields, coercions, unsafe numbers and extra fie
   }
 });
 
-test('raw API authenticates, inserts, rejects duplicates, explicitly replaces and persists', async t => {
+test('public raw API inserts, resubmits and persists without credentials', async t => {
   const { base, post, databasePath } = await running(t);
-  assert.equal((await post(row, { headers: { Authorization: '' } })).status, 401);
-  assert.equal((await post(row, { headers: { Authorization: 'Bearer wrong' } })).status, 401);
   const inserted = await post(row);
   assert.equal(inserted.status, 201);
   assert.deepEqual(await inserted.json(), { replaced: false, serverName: row.serverName });
-  assert.equal((await post({ ...row, serverName: row.serverName.toUpperCase() })).status, 409);
+  assert.equal((await post(row, { headers: { Authorization: 'Bearer obsolete-client-key' } })).status, 200);
+  assert.equal((await post({ ...row, serverName: row.serverName.toUpperCase() })).status, 200);
   const replaced = await post({ ...row, replace: true, qsv: false, ramGiB: 64, swapGiB: 0 });
   assert.equal(replaced.status, 200);
   assert.deepEqual(await replaced.json(), { replaced: true, serverName: row.serverName });
@@ -96,12 +94,12 @@ test('raw API authenticates, inserts, rejects duplicates, explicitly replaces an
   assert.equal((await post({ ...row, serverName: 'lt5-1-58-111alue.pulsedmedia.com', replace: true })).status, 201);
 });
 
-test('YABS uploads and direct rows share duplicate and replacement behavior', async t => {
+test('YABS uploads and direct rows share resubmission behavior', async t => {
   const { base, post } = await running(t);
   assert.equal((await post(yabs, { path: '/api/servers' })).status, 201);
-  assert.equal((await post(row)).status, 409);
+  assert.equal((await post(row)).status, 200);
   assert.equal((await post({ ...row, replace: true })).status, 200);
-  assert.equal((await post(yabs, { path: '/api/servers' })).status, 409);
+  assert.equal((await post(yabs, { path: '/api/servers' })).status, 200);
   assert.equal((await post({ ...yabs, replace: true }, { path: '/api/servers' })).status, 200);
   const records = await (await fetch(base + '/api/servers')).json();
   assert.equal(records.length, 1);
@@ -131,13 +129,11 @@ test('raw API enforces request validation and size/depth limits without writing 
   assert.equal(updated[0].swapBytes, null);
 });
 
-test('raw endpoint shares failed-auth rate limits with YABS and respects disabled uploads', async t => {
+test('raw endpoint shares the upload rate limit with YABS, including invalid requests', async t => {
   const { post } = await running(t, { uploadLimit: 2 });
-  assert.equal((await post(row, { headers: { Authorization: 'wrong' } })).status, 401);
-  assert.equal((await post(yabs, { path: '/api/servers', headers: { Authorization: 'wrong' } })).status, 401);
+  assert.equal((await post({ ...row, qsv: 'invalid' })).status, 400);
+  assert.equal((await post(yabs, { path: '/api/servers' })).status, 201);
   const limited = await post(row);
   assert.equal(limited.status, 429);
   assert.ok(limited.headers.get('retry-after'));
-  const disabled = await running(t, { uploadToken: '' });
-  assert.equal((await disabled.post(row)).status, 503);
 });

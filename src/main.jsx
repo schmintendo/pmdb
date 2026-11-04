@@ -3,12 +3,14 @@ import { createRoot } from 'react-dom/client';
 import { flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table';
 import './styles.css';
 import './upload.css';
+import NodePage from './NodePage.jsx';
+import './node-pages.css';
 
 const displayNumber = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
 const gib = value => `${displayNumber.format(value / 1024 ** 3)} GiB`;
 const tib = value => `${displayNumber.format(value / 1024 ** 4)} TiB`;
 const columns = [
-  { accessorKey: 'serverName', header: 'Server Name', cell: info => <strong className="server-name">{info.getValue()}</strong> },
+  { accessorKey: 'serverName', header: 'Server Name', cell: info => <a className="server-name node-link" href={`/nodes/${encodeURIComponent(info.getValue())}`}>{info.getValue()}</a> },
   { accessorKey: 'processorName', header: 'Processor name' },
   { accessorKey: 'coreCount', header: 'Core count' },
   { id: 'kvm', accessorFn: row => row.kvm ?? undefined, header: 'KVM', sortingFn: 'basic', sortUndefined: 'last', cell: info => {
@@ -35,14 +37,32 @@ async function api(url, options) {
   return body;
 }
 
-function UploadDialog({ onClose, onSaved }) {
+function CommandSnippet({ title, command, note }) {
+  const [message, setMessage] = useState('');
+  async function copy() {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(command);
+      setMessage('Copied');
+    } catch { setMessage('Select the command and copy it manually.'); }
+  }
+  return <div className="command-snippet">
+    <div className="command-heading"><span>{title}</span><button type="button" onClick={copy} aria-label={`Copy ${title}`}>Copy</button></div>
+    <code className="yabs-command">{command}</code>
+    {note && <small>{note}</small>}
+    <span className="copy-status" role="status">{message}</span>
+  </div>;
+}
+
+function UploadDialog({ onClose, onSaved, plans }) {
   const ref = useRef(null);
   const fileInputRef = useRef(null);
   const [serverName, setServerName] = useState('');
   const [qsv, setQsv] = useState('');
-  const [uploadKey, setUploadKey] = useState('');
   const [file, setFile] = useState(null);
-  const [replace, setReplace] = useState(false);
+  const [username, setUsername] = useState('');
+  const [plan, setPlan] = useState('');
+  const [userCount, setUserCount] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => { ref.current.showModal(); }, []);
@@ -52,13 +72,15 @@ function UploadDialog({ onClose, onSaved }) {
     if (!file) return setError('Choose a YABS JSON or text file.');
     if (file.size > 800 * 1024) return setError('The file must be smaller than 800 KiB.');
     if (qsv === '') return setError('Choose Yes or No for Intel QuickSync.');
+    if (!username.trim()) return setError('Choose an identifier and use it for all your submissions.');
+    if (!plans.includes(plan)) return setError('Choose your Pulsed Media plan.');
+    if (userCount === '' || !Number.isSafeInteger(Number(userCount)) || Number(userCount) < 0) return setError('Enter the integer returned by the user-count command.');
     setBusy(true); setError('');
     try {
       const result = await api('/api/servers', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${uploadKey}` },
-        body: JSON.stringify({ serverName, qsv: qsv === 'yes', yabsText: await file.text(), replace }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serverName, qsv: qsv === 'yes', yabsText: await file.text(), username: username.trim(), plan, userCount: Number(userCount) }),
       });
-      setUploadKey('');
       onSaved(result);
     } catch (error) { setError(error.message); }
     finally { setBusy(false); }
@@ -67,6 +89,8 @@ function UploadDialog({ onClose, onSaved }) {
     <form onSubmit={submit}>
       <div className="dialog-heading"><div><h2 id="upload-title">Upload a server</h2><p>Import hardware details from a YABS result.</p></div><button type="button" aria-label="Close upload" onClick={onClose} disabled={busy}>×</button></div>
       <label className="form-field">Server Name<input autoFocus required maxLength={253} value={serverName} onChange={e => setServerName(e.target.value)} placeholder="le0-000-000name.pulsedmedia.com" autoComplete="off" disabled={busy} /><small>Use the hostname. Datacenter: <strong>{dc}</strong></small></label>
+      <label className="form-field">Your submission identifier<input required maxLength={64} value={username} onChange={e => setUsername(e.target.value)} autoComplete="off" placeholder="Choose a nickname or any consistent identifier" disabled={busy} /><small><strong>This does not have to be your actual username.</strong> Choose any identifier up to 64 characters and use exactly the same one for all your submissions. It is case-sensitive and not shown publicly. Reusing it updates your previous plan on this node.</small></label>
+      <label className="form-field">Pulsed Media plan<select required value={plan} onChange={e => setPlan(e.target.value)} disabled={busy}><option value="">Choose your plan…</option>{plans.map(name => <option key={name} value={name}>{name}</option>)}</select></label>
       <div className="form-field" role="group" aria-labelledby="yabs-results-label">
         <span id="yabs-results-label">YABS results</span>
         <input ref={fileInputRef} id="yabs-file" hidden type="file" accept=".json,.txt,.log,application/json,text/plain" aria-label="YABS results file" onChange={e => setFile(e.target.files[0] || null)} disabled={busy} />
@@ -74,11 +98,13 @@ function UploadDialog({ onClose, onSaved }) {
           <button type="button" aria-controls="yabs-file" aria-describedby="yabs-file-name" onClick={() => fileInputRef.current?.click()} disabled={busy}>Browse…</button>
           <span id="yabs-file-name" className="yabs-file-name" role="status">{file?.name || 'No file selected'}</span>
         </div>
-        <small>YABS JSON:<code className="yabs-command">curl -sL yabs.sh | bash -s -- -figw yabs.json</code></small>
+        <CommandSnippet title="YABS JSON" command="curl -sL yabs.sh | bash -s -- -gw yabs.json" note="Includes network and disk benchmarks; skips Geekbench." />
+      </div>
+      <div className="user-count-section">
+        <CommandSnippet title="Count node users" command={"awk -F: '$3 > 1000 {n++} END {print n+0}' /etc/passwd"} note="Counts /etc/passwd entries with UID greater than 1000, including any service accounts in that range." />
+        <label className="form-field">Number of users<input required type="number" min="0" max="10000000" step="1" inputMode="numeric" value={userCount} onChange={e => setUserCount(e.target.value)} placeholder="Paste the integer returned above" disabled={busy} /></label>
       </div>
       <label className="form-field">Intel QuickSync<select required value={qsv} onChange={e => setQsv(e.target.value)} disabled={busy}><option value="">Choose manually…</option><option value="yes">Yes</option><option value="no">No</option></select><small>Provided by you; this is not inferred from the processor name.</small></label>
-      <label className="form-field">Upload key<input type="password" required value={uploadKey} onChange={e => setUploadKey(e.target.value)} autoComplete="off" disabled={busy} /><small>Ask the site administrator for the upload key.</small></label>
-      <label className="checkbox-row"><input type="checkbox" checked={replace} onChange={e => setReplace(e.target.checked)} disabled={busy} />Replace existing server with this name</label>
       {error && <p className="error-box" role="alert">{error}</p>}
       <div className="dialog-actions"><button type="button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save server'}</button></div>
     </form>
@@ -92,6 +118,7 @@ function App() {
   const [notice, setNotice] = useState('');
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadsEnabled, setUploadsEnabled] = useState(false);
+  const [plans, setPlans] = useState([]);
   const [globalFilter, setGlobalFilter] = useState('');
   const [columnFilters, setColumnFilters] = useState([]);
   const [sorting, setSorting] = useState([{ id: 'serverName', desc: false }]);
@@ -100,7 +127,7 @@ function App() {
     setError(''); setLoading(true);
     try {
       const [records, config] = await Promise.all([api('/api/servers'), api('/api/config')]);
-      setData(records); setUploadsEnabled(config.uploadsEnabled);
+      setData(records); setUploadsEnabled(config.uploadsEnabled); setPlans(config.plans || []);
     } catch (error) { setError(error.message); }
     finally { setLoading(false); }
   }
@@ -154,7 +181,16 @@ function App() {
       </section>
       <footer className="page-footer"><span>All values, except for Intel QuickSync, as reported by YABS</span><span>{!loading && !uploadsEnabled ? 'Uploads are currently unavailable.' : 'Blatantly vibe-coded by schmintendo.'}</span></footer>
     </main>
-    {uploadOpen && <UploadDialog onClose={() => setUploadOpen(false)} onSaved={saved} />}
+    {uploadOpen && <UploadDialog onClose={() => setUploadOpen(false)} onSaved={saved} plans={plans} />}
   </div>;
 }
-createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);
+function Route() {
+  const node = window.location.pathname.match(/^\/nodes\/([^/]+)\/?$/);
+  if (node) {
+    let hostname;
+    try { hostname = decodeURIComponent(node[1]); } catch { hostname = ''; }
+    return <NodePage hostname={hostname} />;
+  }
+  return <App />;
+}
+createRoot(document.getElementById('root')).render(<React.StrictMode><Route /></React.StrictMode>);

@@ -10,8 +10,7 @@ import { parseYabs, parseSubmission } from '../server/yabs.mjs';
 import { parseRawSubmission } from '../server/raw.mjs';
 
 const example = JSON.parse(readFileSync(new URL('../examples/yabs-example.json', import.meta.url), 'utf8'));
-const raw = JSON.parse(readFileSync(new URL('../examples/server-row.json', import.meta.url), 'utf8'));
-const token = 'kvm-api-fixed-test-key-not-a-real-secret';
+const raw = { ...JSON.parse(readFileSync(new URL('../examples/server-row.json', import.meta.url), 'utf8')), plan: 'Plan 1' };
 const source = vm => JSON.stringify({ ...example, os: { ...example.os, vm }, cpu: { ...example.cpu, virt: true } });
 
 test('KVM is derived from os.vm, independently of CPU virtualization support', () => {
@@ -67,7 +66,7 @@ test('KVM migration preserves existing hardware, swap, QuickSync and timestamps'
     }]);
     db.close(); db = openDatabase(filename);
     assert.equal(db.list()[0].kvm, null); // Reopening an already-migrated DB is safe.
-    db.save(parseSubmission({ serverName: raw.serverName, qsv: true, yabsText: source('KVM') }), true);
+    db.save(parseSubmission({ serverName: raw.serverName, qsv: true, yabsText: source('KVM'), username: 'tester', plan: 'Plan 1', userCount: 12 }), true);
     assert.equal(db.list()[0].kvm, true);
     db.close(); db = openDatabase(filename);
     assert.equal(db.list()[0].kvm, true);
@@ -83,15 +82,15 @@ test('KVM migration preserves existing hardware, swap, QuickSync and timestamps'
 
 test('API persists KVM from YABS and raw rows through replacement without manual YABS overrides', async t => {
   const directory = mkdtempSync(join(tmpdir(), 'pmdb-kvm-api-'));
-  const app = createApp({ databasePath: join(directory, 'servers.sqlite'), uploadToken: token });
+  const app = createApp({ databasePath: join(directory, 'servers.sqlite'), plans: ['Plan 1', 'Plan 2'] });
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
   t.after(async () => { await app.close(); rmSync(directory, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${app.server.address().port}`;
   const post = (body, path = '/api/servers') => fetch(base + path, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
   const records = async () => (await fetch(base + '/api/servers')).json();
-  const submission = { serverName: raw.serverName, qsv: true, yabsText: source('KVM') };
+  const submission = { serverName: raw.serverName, qsv: true, yabsText: source('KVM'), username: 'tester', plan: 'Plan 1', userCount: 12 };
   assert.equal((await post(submission)).status, 201);
   assert.equal((await records())[0].kvm, true);
   assert.equal((await post({ ...submission, yabsText: source('NONE'), replace: true })).status, 200);

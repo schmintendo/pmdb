@@ -1,6 +1,9 @@
 {
   "version": "example-only",
-  "os": { "vm": "NONE" },
+  "os": { "vm": "NONE", "distro": "Debian GNU/Linux 12 (bookworm)", "kernel": "6.1.0-example", "arch": "x64" },
   "cpu": { "model": "Intel(R) Core(TM) i7-12700", "cores": 20, "freq": "2100.000 MHz" },
-  "mem": { "ram": 33554432, "ram_units": "KiB", "swap": 8388608, "swap_units": "KiB", "disk": 976562500, "disk_units": "KB" }
+  "mem": { "ram": 33554432, "ram_units": "KiB", "swap": 8388608, "swap_units": "KiB", "disk": 976562500, "disk_units": "KB" },
+  "runtime": { "start": 1793610000 },
+  "iperf": [ { "mode": "IPv4", "provider": "Example test provider", "loc": "Example location", "send": "1.20 Gbits/sec", "recv": "1.15 Gbits/sec", "latency": "12.5 ms" } ],
+  "fio": [ { "bs": "4k", "speed_r": 50000, "speed_w": 51000, "speed_rw": 101000, "iops_r": 12500, "iops_w": 12750, "iops_rw": 25250, "speed_units": "KBps" } ]
 }

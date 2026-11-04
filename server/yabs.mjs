@@ -1,4 +1,7 @@
-export class InputError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
+import { InputError } from './input-error.mjs';
+import { submissionIdentity, systemInformation } from './submission.mjs';
+import { normalizedBenchmarks, yabsBenchmarks } from './benchmarks.mjs';
+export { InputError } from './input-error.mjs';
 
 export function parseLimitedJson(text) {
   let depth = 0, quoted = false, escaped = false;
@@ -74,6 +77,7 @@ export function parseYabs(source) {
   if (typeof source !== 'string' || !source.trim()) throw new InputError('Choose a YABS JSON or text results file.');
   const clean = source.replace(/^\uFEFF/, '').replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '').trim();
   let processorName, coreCount, processorMhz, ramBytes, storageBytes, swapBytes = null, kvm = null;
+  let system = systemInformation(null), benchmarks = normalizedBenchmarks(null);
   if (clean.startsWith('{') || clean.startsWith('[')) {
     let data;
     try { data = parseLimitedJson(clean); } catch { throw new InputError('The YABS JSON file is malformed. Upload the file created with -w yabs.json.'); }
@@ -85,6 +89,8 @@ export function parseYabs(source) {
     if (data.mem.swap !== undefined) swapBytes = bytes(data.mem.swap, data.mem.swap_units, 'SWAP');
     storageBytes = bytes(data.mem.disk, data.mem.disk_units, 'total storage', true);
     kvm = kvmStatus(data.os?.vm);
+    system = systemInformation(data.os);
+    benchmarks = yabsBenchmarks(data);
   } else {
     const field = pattern => clean.match(pattern)?.[1];
     processorName = field(/^\s*(?:Processor|CPU Model)\s*:\s*(.+)$/im);
@@ -96,16 +102,22 @@ export function parseYabs(source) {
     if (swap !== undefined) swapBytes = textSize(swap, 'SWAP');
     storageBytes = textSize(field(/^\s*Disk\s*:\s*(.+)$/im), 'total storage');
     kvm = kvmStatus(field(/^[ \t]*VM Type[ \t]*:[ \t]*(.*)$/im));
+    system = systemInformation({
+      distro: field(/^[ \t]*Distro[ \t]*:[ \t]*(.*)$/im),
+      kernel: field(/^[ \t]*Kernel[ \t]*:[ \t]*(.*)$/im),
+      arch: field(/^[ \t]*Arch[ \t]*:[ \t]*(.*)$/im),
+      vm: field(/^[ \t]*VM Type[ \t]*:[ \t]*(.*)$/im),
+    });
   }
   if (typeof processorName !== 'string' || !processorName.trim() || processorName.length > 300 || /[\x00-\x1f]/.test(processorName)) throw new InputError('YABS processor name is missing or invalid.');
-  return { processorName: processorName.trim(), coreCount, processorMhz, ramBytes, storageBytes, swapBytes, kvm };
+  return { processorName: processorName.trim(), coreCount, processorMhz, ramBytes, storageBytes, swapBytes, kvm, system, benchmarks };
 }
 
 export function parseSubmission(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new InputError('Expected a submission object.');
-  for (const key of Object.keys(body)) if (!['serverName', 'qsv', 'yabsText', 'replace'].includes(key)) throw new InputError('Unexpected submission field.');
+  for (const key of Object.keys(body)) if (!['serverName', 'qsv', 'yabsText', 'replace', 'username', 'plan', 'userCount'].includes(key)) throw new InputError('Unexpected submission field.');
   const serverName = normalizeHostname(body.serverName);
   if (typeof body.qsv !== 'boolean') throw new InputError('Choose Yes or No for Intel QuickSync.');
   if (body.replace !== undefined && typeof body.replace !== 'boolean') throw new InputError('Replace must be true or false.');
-  return { serverName, qsv: body.qsv, ...parseYabs(body.yabsText) };
+  return { serverName, qsv: body.qsv, ...submissionIdentity(body), ...parseYabs(body.yabsText) };
 }

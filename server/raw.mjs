@@ -1,8 +1,11 @@
 import { InputError, normalizeHostname } from './yabs.mjs';
+import { submissionIdentity, systemInformation } from './submission.mjs';
+import { normalizedBenchmarks } from './benchmarks.mjs';
 
 const fields = new Set([
   'serverName', 'processorName', 'coreCount', 'processorMhz',
   'ramGiB', 'swapGiB', 'storageTiB', 'qsv', 'kvm', 'replace',
+  'username', 'plan', 'userCount', 'system', 'benchmarks',
 ]);
 
 function numeric(value, label, { integer = false, allowZero = false } = {}) {
@@ -35,6 +38,7 @@ export function parseRawSubmission(body) {
   if (body.replace !== undefined && typeof body.replace !== 'boolean') throw new InputError('Replace must be true or false.');
   return {
     serverName,
+    ...submissionIdentity(body),
     processorName: body.processorName.trim(),
     coreCount: numeric(body.coreCount, 'Core count', { integer: true }),
     processorMhz: body.processorMhz == null ? null : numeric(body.processorMhz, 'Processor MHz'),
@@ -43,5 +47,7 @@ export function parseRawSubmission(body) {
     storageBytes: capacity(body.storageTiB, 'Total storage (TiB)', 1024 ** 4, true),
     qsv: body.qsv,
     kvm: body.kvm ?? null,
+    system: systemInformation(body.system, true),
+    benchmarks: normalizedBenchmarks(body.benchmarks),
   };
 }

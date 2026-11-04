@@ -33,3 +33,13 @@
 .kvm-yes { color: #a2dcb3; }
 .kvm-no { color: #bdc9c0; }
 .kvm-unknown { color: var(--muted); }
+
+.command-snippet { min-width: 0; color: #9fb6a7; }
+.command-heading { display: flex; justify-content: space-between; align-items: center; gap: 14px; font-size: 11px; }
+.command-heading button { padding: 4px 9px; font-size: 11px; }
+.command-snippet .yabs-command { margin: 7px 0; font-size: 11px; line-height: 1.6; }
+.command-snippet small { display: block; font-size: 11px; line-height: 1.5; }
+.copy-status { display: block; font-size: 11px; color: #b7dfc3; margin-top: 4px; }
+.copy-status:empty { display: none; }
+.user-count-section { margin-bottom: 20px; }
+.user-count-section .form-field { margin-top: 12px; margin-bottom: 0; }
