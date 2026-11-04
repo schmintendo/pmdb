@@ -1,17 +1,19 @@
 # pmdb.fyi
 
-A dark React + TanStack Table website with uploads, a Node.js API, and SQLite storage. Exactly ten columns:
+A React + TanStack Table website with uploads, a Node.js API, and SQLite storage. It receives its data from the [yabs.sh](https://github.com/masonr/yet-another-bench-script) uploads that users supply.
+
+Data Fields:
 
 1. Server Name — the hostname supplied in the upload form
-2. Processor name — YABS
-3. Core count — YABS
+2. Processor name — yabs.sh
+3. Core count — yabs.sh
 4. KVM — ✓ for KVM, × for NONE, or — when unknown
-5. Processor MHz — YABS
-6. RAM — YABS, displayed in GiB
-7. SWAP — YABS, displayed in GiB
-8. Total storage — YABS, displayed in TiB
-9. Datacenter — the prefix before the first regular hyphen in the hostname
-10. Intel QuickSync — Yes for Intel N100 processors, No for other processors
+5. Processor MHz — yabs.sh
+6. RAM — yabs.sh, displayed in GiB
+7. SWAP — yabs.sh, displayed in GiB
+8. Total storage — yabs.sh, displayed in TiB
+9. Datacenter — the prefix before the first regular hyphen in the hostname.  Realistically all of the nodes are in the [Lauttasaari](https://en.wikipedia.org/wiki/Lauttasaari) datacenter, but the prefix tells us the rack the node is in.
+10. Intel QuickSync — Yes for Intel N100 processors (so far), No for other processors
 
 `le4-0-105-238louhi.pulsedmedia.com` produces `le4`; `lt5-1-58-111alue.pulsedmedia.com` produces `lt5`. Hostnames are lowercased, with an optional trailing dot removed. Bare node names such as `lt5-1-58-111alue` automatically receive `.pulsedmedia.com` in both upload APIs. Other complete domains are retained. A hostname without a hyphen displays Unknown for datacenter.
 
@@ -25,7 +27,7 @@ Open a terminal in the folder containing package.json:
 npm install
 ```
 
-No `.env` or upload key is required. If you want to customize the port or data
+No `.env` is required. If you want to customize the port or data
 paths, copy `.env.example` to `.env`. In PowerShell:
 
 ```powershell
@@ -37,19 +39,12 @@ On Linux:
 ```sh
 cp .env.example .env
 chmod 600 .env
-```
-
-Uploads are public and enabled without environment configuration. Any old
-`UPLOAD_TOKEN` value in an existing `.env` is ignored and can be removed.
-Then run:
-
-```sh
 npm run dev
 ```
 
 Open the Vite localhost URL, usually http://127.0.0.1:5173. This starts both the frontend and the API on localhost. Ctrl+C stops them. Node.js 24+ is required for the built-in SQLite backend.
 
-## Upload a server
+## Uploading
 
 Generate JSON on the server being cataloged:
 
@@ -75,8 +70,7 @@ awk -F: '$3 > 1000 && $3 != 65534 {n++} END {print n+0}' /etc/passwd
 It counts UIDs greater than 1000, excluding `nobody` (UID 65534). Root (UID 0)
 and UID 1000 are not counted. Other service accounts above the threshold are
 included. This is a reported account count, not currently logged-in sessions.
-Zero is valid; leave the field blank if unknown. Command snippets have separate Copy buttons;
-only Browse opens the file picker.
+Zero is valid; leave the field blank if unknown.
 
 Saving updates the table immediately, with no GitHub commit or redeployment.
 
@@ -85,19 +79,6 @@ it includes Processor, CPU cores, RAM, and Disk lines. Text uploads populate
 hardware and recognizable OS details, but benchmark history is extracted only
 from structured JSON. An intentionally fictional fixture is included at
 `examples/yabs-example.json`. Uploads are parsed as data and never executed.
-
-There is no replacement checkbox. Every valid submission updates the node's
-latest hardware and OS. A supplied user count replaces the last reported count;
-leaving it blank retains the previous count. A node has one current plan entry
-per submission identifier; reusing the same identifier on the same hostname replaces
-that entry instead of adding another participant. A different identifier with
-the same plan increments that plan's count. Changing plans moves that user's
-entry to the new plan. Omitting a plan preserves that identifier's previous plan;
-a new identifier without a plan does not increase any plan count.
-Identifiers are trimmed but case-sensitive and may use
-spaces, punctuation and Unicode, up to 64 characters. Use the exact same case
-and spelling each time. Control characters and blank identifiers are rejected.
-Other visitors see changes after reloading or Refresh.
 
 There is no authentication or ownership verification. An identifier matches
 repeat submissions; it is not proof of identity. Anyone using the same identifier
@@ -233,7 +214,7 @@ Save your row as `server-row.json`. An example is included at
 }
 ```
 
-Submit from Linux/macOS without an upload key:
+Submit from Linux/macOS:
 
 ```sh
 curl --fail-with-body --show-error \
