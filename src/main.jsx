@@ -6,6 +6,8 @@ import './upload.css';
 import NodePage from './NodePage.jsx';
 import './node-pages.css';
 
+const PAGE_SIZES = [10, 25, 50, 100];
+const PAGE_SIZE_STORAGE_KEY = 'pmdb.pageSize';
 const displayNumber = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
 const gib = value => `${displayNumber.format(value / 1024 ** 3)} GiB`;
 const tib = value => `${displayNumber.format(value / 1024 ** 4)} TiB`;
@@ -119,7 +121,19 @@ function App() {
   const [globalFilter, setGlobalFilter] = useState('');
   const [columnFilters, setColumnFilters] = useState([]);
   const [sorting, setSorting] = useState([{ id: 'serverName', desc: false }]);
-  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
+  const [pagination, setPagination] = useState(() => {
+    let pageSize = 10;
+    try {
+      const stored = Number(window.localStorage.getItem(PAGE_SIZE_STORAGE_KEY));
+      if (PAGE_SIZES.includes(stored)) pageSize = stored;
+    } catch { /* Use the default when browser storage is unavailable. */ }
+    return { pageIndex: 0, pageSize };
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(pagination.pageSize));
+    } catch { /* The table still works when browser storage is unavailable. */ }
+  }, [pagination.pageSize]);
   async function load() {
     setError(''); setLoading(true);
     try {
@@ -174,7 +188,7 @@ function App() {
             <tbody>{rows.length ? rows.map(row => <tr key={row.id}>{row.getVisibleCells().map(cell => <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}</tr>) : <tr><td colSpan={columns.length}><div className="empty"><strong>{loading ? 'Loading servers…' : error ? 'Could not load the catalog' : data.length ? 'No matching servers' : 'Your catalog is ready'}</strong><p>{loading ? 'Fetching the latest catalog.' : error ? 'Use Retry above to reconnect.' : data.length ? 'Try a different search or clear your filters.' : 'Upload a YABS file to add your first server.'}</p>{activeFilters && <button onClick={reset}>Clear filters</button>}</div></td></tr>}</tbody>
           </table>
         </div>
-        <footer className="pagination"><span role="status">{count ? `${pagination.pageIndex * pagination.pageSize + 1}–${pagination.pageIndex * pagination.pageSize + rows.length}` : '0'} of {count} servers</span><div className="page-controls"><label htmlFor="page-size">Rows per page</label><select id="page-size" value={pagination.pageSize} onChange={e => table.setPageSize(Number(e.target.value))}>{[10, 25, 50, 100].map(size => <option key={size} value={size}>{size}</option>)}</select><span>Page {count ? pagination.pageIndex + 1 : 0} of {table.getPageCount()}</span><button aria-label="Previous page" disabled={!table.getCanPreviousPage()} onClick={() => table.previousPage()}>←</button><button aria-label="Next page" disabled={!table.getCanNextPage()} onClick={() => table.nextPage()}>→</button></div></footer>
+        <footer className="pagination"><span role="status">{count ? `${pagination.pageIndex * pagination.pageSize + 1}–${pagination.pageIndex * pagination.pageSize + rows.length}` : '0'} of {count} servers</span><div className="page-controls"><label htmlFor="page-size">Rows per page</label><select id="page-size" value={pagination.pageSize} onChange={e => table.setPageSize(Number(e.target.value))}>{PAGE_SIZES.map(size => <option key={size} value={size}>{size}</option>)}</select><span>Page {count ? pagination.pageIndex + 1 : 0} of {table.getPageCount()}</span><button aria-label="Previous page" disabled={!table.getCanPreviousPage()} onClick={() => table.previousPage()}>←</button><button aria-label="Next page" disabled={!table.getCanNextPage()} onClick={() => table.nextPage()}>→</button></div></footer>
       </section>
       <footer className="page-footer"><span>Hardware as reported by YABS; Intel QuickSync inferred from processor names</span><span>{!loading && !uploadsEnabled ? 'Uploads are currently unavailable.' : 'Blatantly vibe-coded by schmintendo.'}</span></footer>
     </main>
