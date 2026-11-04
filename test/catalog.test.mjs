@@ -10,8 +10,7 @@ import { parseYabs, parseSubmission, datacenterFor, normalizeHostname, parseLimi
 
 const example = JSON.parse(readFileSync(new URL('../examples/yabs-example.json', import.meta.url), 'utf8'));
 const source = JSON.stringify(example);
-const token = 'this-is-a-fixed-test-key-not-a-real-secret';
-const payload = { serverName: 'le4-0-105-238louhi.pulsedmedia.com', qsv: true, yabsText: source };
+const payload = { serverName: 'le4-0-105-238louhi.pulsedmedia.com', qsv: true, yabsText: source, username: 'tester', plan: 'Plan 1', userCount: 12 };
 
 test('user hostname examples and normalization', () => {
   assert.equal(datacenterFor('le4-0-105-238louhi.pulsedmedia.com'), 'le4');
@@ -82,26 +81,26 @@ async function running(t, options = {}) {
   const distPath = resolve(directory, 'dist');
   const { mkdirSync } = await import('node:fs'); mkdirSync(distPath);
   writeFileSync(join(distPath, 'index.html'), '<h1>Test catalog</h1>');
-  const app = createApp({ databasePath: dbPath, uploadToken: token, distPath, ...options });
+  const app = createApp({ databasePath: dbPath, distPath, plans: ['Plan 1', 'Plan 2'], ...options });
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
   const url = `http://127.0.0.1:${app.server.address().port}`;
   t.after(async () => { await app.close(); rmSync(directory, { recursive: true }); });
   return { app, url, dbPath, distPath };
 }
-const post = (url, body, headers = {}) => fetch(url + '/api/servers', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+const post = (url, body, headers = {}) => fetch(url + '/api/servers', { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
 
-test('API authentication, upload, ten fields, duplicate protection, replace, and persistence', async t => {
+test('public YABS uploads work without credentials and preserve resubmissions and persistence', async t => {
   const { app, url, dbPath, distPath } = await running(t);
-  assert.equal((await post(url, payload, { Authorization: 'Bearer wrong' })).status, 401);
   assert.equal((await post(url, payload)).status, 201);
-  assert.equal((await post(url, payload)).status, 409);
+  assert.equal((await post(url, payload, { Authorization: 'Bearer obsolete-client-key' })).status, 200);
+  assert.equal((await post(url, payload)).status, 200);
   let rows = await (await fetch(url + '/api/servers')).json();
   assert.equal(rows.length, 1); assert.equal(Object.keys(rows[0]).length, 10); assert.equal(rows[0].datacenter, 'le4');
   assert.equal(rows[0].swapBytes, 8 * 1024 ** 3);
   assert.equal((await post(url, { ...payload, qsv: false, replace: true })).status, 200);
   rows = await (await fetch(url + '/api/servers')).json(); assert.equal(rows[0].qsv, false);
   // A second application instance reads the same persisted SQLite database.
-  const second = createApp({ databasePath: dbPath, uploadToken: token, distPath });
+  const second = createApp({ databasePath: dbPath, distPath, plans: ['Plan 1', 'Plan 2'] });
   await new Promise(resolve => second.server.listen(0, '127.0.0.1', resolve));
   const result = await fetch(`http://127.0.0.1:${second.server.address().port}/api/servers`);
   assert.equal((await result.json())[0].serverName, payload.serverName);
@@ -126,10 +125,9 @@ test('database and credentials are not served; stored text remains inert JSON', 
   assert.match(response.headers.get('content-security-policy'), /default-src 'self'/);
   assert.equal((await response.json())[0].processorName, JSON.parse(malicious).cpu.model);
 });
-test('upload rate limiting and disabled uploads', async t => {
+test('public uploads retain rate limits and always advertise availability', async t => {
   const { url } = await running(t, { uploadLimit: 2 });
-  await post(url, payload, { Authorization: 'wrong' }); await post(url, payload, { Authorization: 'wrong' });
+  assert.equal((await (await fetch(url + '/api/config')).json()).uploadsEnabled, true);
+  await post(url, payload); await post(url, payload);
   const response = await post(url, payload); assert.equal(response.status, 429); assert.ok(response.headers.get('retry-after'));
-  const disabled = await running(t, { uploadToken: '' });
-  assert.equal((await post(disabled.url, payload)).status, 503);
 });

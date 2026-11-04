@@ -8,7 +8,9 @@
     "build": "vite build",
     "start": "node --env-file-if-exists=.env server/index.mjs",
     "test": "node --test test/*.test.mjs",
-    "backup": "node --env-file-if-exists=.env scripts/backup.mjs"
+    "backup": "node --env-file-if-exists=.env scripts/backup.mjs",
+    "sync-plans": "node --env-file-if-exists=.env scripts/sync-plans.mjs",
+    "rename-node": "node --env-file-if-exists=.env scripts/rename-node.mjs"
   },
   "engines": {
     "node": ">=24.0.0"

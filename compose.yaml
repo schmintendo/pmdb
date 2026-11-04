@@ -2,8 +2,6 @@ services:
   catalog:
     build: .
     restart: unless-stopped
-    environment:
-      UPLOAD_TOKEN: ${UPLOAD_TOKEN:?Set UPLOAD_TOKEN in .env}
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
