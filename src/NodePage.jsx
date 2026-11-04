@@ -16,13 +16,13 @@ function Measurements({ rows }) {
   return <dl className="node-measurements">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{display(value)}</dd></div>)}</dl>;
 }
 function RunTime({ run }) {
-  return <div className="run-time"><time dateTime={run.measuredAt || run.submittedAt}>{dateLabel(run.measuredAt || run.submittedAt)}</time><span>{run.measuredAt ? 'YABS run' : 'Submitted'}</span></div>;
+  return <div className="run-time"><time dateTime={run.measuredAt || run.submittedAt}>{dateLabel(run.measuredAt || run.submittedAt)}</time></div>;
 }
 function SpeedHistory({ runs, hasRuns }) {
   const modes = [...new Set(runs.flatMap(run => (run.tests || []).map(test => networkMode(test.mode))))]
     .sort((a, b) => ({ IPv4: 0, IPv6: 1 }[a] ?? 2) - ({ IPv4: 0, IPv6: 1 }[b] ?? 2) || a.localeCompare(b));
   return <section className="node-panel network-panel" aria-labelledby="speed-history-heading">
-    <div className="node-panel-heading"><h2 id="speed-history-heading">Historical speed tests</h2><p>One row per YABS run, newest first. Scroll sideways to compare every provider.</p></div>
+    <div className="node-panel-heading"><h2 id="speed-history-heading">Historical speed tests</h2><p>One row per submission, newest first. Scroll sideways to compare every provider.</p></div>
     {modes.length ? modes.map(mode => {
       const endpoints = networkEndpoints(runs, mode);
       const modeRuns = runs.filter(run => (run.tests || []).some(test => networkMode(test.mode) === mode));
@@ -57,7 +57,7 @@ function DiskHistory({ runs, hasRuns }) {
   const blocks = [...new Set([...DISK_BLOCKS, ...runs.flatMap(run => (run.tests || []).map(test => diskBlock(test.blockSize)))])];
   const diskRuns = runs.filter(run => run.tests?.length);
   return <section className="node-panel disk-panel" aria-labelledby="disk-history-heading">
-    <div className="node-panel-heading"><h2 id="disk-history-heading">Historical disk I/O</h2><p>One row per YABS run. 4k speeds use KB/s; larger blocks use MB/s. Each speed includes its IOPS.</p></div>
+    <div className="node-panel-heading"><h2 id="disk-history-heading">Historical disk I/O</h2><p>One row per submission, newest first.</p></div>
     {diskRuns.length ? <div className="history-table-scroll" role="region" aria-label="Disk I/O history" tabIndex={0}>
       <table className="history-table disk-history-table">
         <caption className="sr-only">Disk I/O by date and block size. Read, write, and total each show throughput and IOPS.</caption>
@@ -185,7 +185,7 @@ export default function NodePage({ hostname }) {
       {error && <div className="error-box" role="alert"><strong>{notFound ? 'Node not found' : 'Could not load node'}</strong><p>{error}</p>{!notFound && <button type="button" onClick={() => setReload(value => value + 1)}>Retry</button>}</div>}
       {!error && server && <div aria-busy={loading}>
         <section className="node-overview" aria-labelledby="node-name">
-          <div className="node-heading"><div><span className="node-eyebrow">NODE DETAILS</span><h1 id="node-name">{data.friendlyName || friendlyName(server.serverName)}</h1><p className="node-hostname">{server.serverName}</p></div><div className="node-user-count"><span>Number of users</span><strong>{data.userCount == null ? '—' : format.format(data.userCount)}</strong><small>Latest submitted count of UIDs &gt; 1000, excluding nobody (65534)</small></div></div>
+          <div className="node-heading"><div><span className="node-eyebrow">NODE DETAILS</span><h1 id="node-name">{data.friendlyName || friendlyName(server.serverName)}</h1><p className="node-hostname">{server.serverName}</p></div><div className="node-user-count"><span>Number of users</span><strong>{data.userCount == null ? '—' : format.format(data.userCount)}</strong></div></div>
           <div className="node-system-grid">
             <section aria-label="Hardware"><h2>System information</h2><Measurements rows={[
               ['Datacenter', server.datacenter], ['Processor', server.processorName],
@@ -196,7 +196,7 @@ export default function NodePage({ hostname }) {
             ]} /></section>
             <section aria-label="Operating system"><h2>Operating system</h2><Measurements rows={[
               ['OS', system.distro], ['Kernel', system.kernel], ['Architecture', system.arch], ['Virtualization', system.vm],
-            ]} /><p className="node-updated">Last submitted: {dateLabel(data.updatedAt)}</p><p className="node-data-note">Hardware, user count, plans, and benchmarks are reported by contributors. Intel QuickSync is inferred from the processor name.</p></section>
+            ]} /><p className="node-updated">Last submitted: {dateLabel(data.updatedAt)}</p><p className="node-data-note">Hardware, user count, plans, and benchmarks are reported by contributors.</p></section>
           </div>
         </section>
         <div className="node-columns">
