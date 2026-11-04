@@ -1,5 +1,5 @@
 import { InputError } from './input-error.mjs';
-import { submissionIdentity, systemInformation } from './submission.mjs';
+import { inferQuickSync, submissionIdentity, systemInformation } from './submission.mjs';
 import { normalizedBenchmarks, yabsBenchmarks } from './benchmarks.mjs';
 export { InputError } from './input-error.mjs';
 
@@ -17,9 +17,10 @@ export function parseLimitedJson(text) {
   return JSON.parse(text);
 }
 
-export function normalizeHostname(value) {
+export function normalizeHostname(value, { canonical = true } = {}) {
   if (typeof value !== 'string') throw new InputError('Server Name is required. Use the server hostname.');
-  const name = value.trim().toLowerCase().replace(/\.$/, '');
+  let name = value.trim().toLowerCase().replace(/\.$/, '');
+  if (canonical && name && !name.includes('.')) name += '.pulsedmedia.com';
   if (name.length > 253 || !name || !name.split('.').every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) {
     throw new InputError('Server Name must be a valid hostname, such as le0-000-000name.pulsedmedia.com.');
   }
@@ -117,7 +118,8 @@ export function parseSubmission(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new InputError('Expected a submission object.');
   for (const key of Object.keys(body)) if (!['serverName', 'qsv', 'yabsText', 'replace', 'username', 'plan', 'userCount'].includes(key)) throw new InputError('Unexpected submission field.');
   const serverName = normalizeHostname(body.serverName);
-  if (typeof body.qsv !== 'boolean') throw new InputError('Choose Yes or No for Intel QuickSync.');
+  if (body.qsv !== undefined && typeof body.qsv !== 'boolean') throw new InputError('Intel QuickSync (qsv) must be true or false.');
   if (body.replace !== undefined && typeof body.replace !== 'boolean') throw new InputError('Replace must be true or false.');
-  return { serverName, qsv: body.qsv, ...submissionIdentity(body), ...parseYabs(body.yabsText) };
+  const hardware = parseYabs(body.yabsText);
+  return { serverName, ...submissionIdentity(body), ...hardware, qsv: inferQuickSync(hardware.processorName) };
 }

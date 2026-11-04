@@ -2,7 +2,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, chmodSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { InputError, datacenterFor } from './yabs.mjs';
+import { InputError, datacenterFor, normalizeHostname } from './yabs.mjs';
+import { inferQuickSync } from './submission.mjs';
 import { nodeFilePath, initializeNodeFile, prepareNodeDirectory, writeNodeSubmission, readNodePage } from './node-store.mjs';
 
 export function openDatabase(filename, { nodesPath } = {}) {
@@ -46,11 +47,35 @@ export function openDatabase(filename, { nodesPath } = {}) {
         serverName: row.server_name, processorName: row.processor_name,
         coreCount: row.core_count, processorMhz: row.processor_mhz,
         ramBytes: row.ram_bytes, storageBytes: row.storage_bytes, swapBytes: row.swap_bytes,
-        datacenter: datacenterFor(row.server_name), qsv: Boolean(row.qsv),
+        datacenter: datacenterFor(row.server_name), qsv: inferQuickSync(row.processor_name),
         kvm: row.kvm == null ? null : Boolean(row.kvm),
       });
   function insertRecord(record, now) {
-    insert.run(record.serverName, record.processorName, record.coreCount, record.processorMhz, record.ramBytes, record.storageBytes, record.swapBytes ?? null, Number(record.qsv), record.kvm == null ? null : Number(record.kvm), now, now);
+    insert.run(record.serverName, record.processorName, record.coreCount, record.processorMhz, record.ramBytes, record.storageBytes, record.swapBytes ?? null, Number(inferQuickSync(record.processorName)), record.kvm == null ? null : Number(record.kvm), now, now);
+  }
+  function legacyConflict(name) {
+    const suffix = '.pulsedmedia.com';
+    if (!name.endsWith(suffix)) return;
+    const short = name.slice(0, -suffix.length);
+    if (!short.includes('.') && exists.get(short)) {
+      if (exists.get(name)) {
+        throw new InputError(`Both ${short} and ${name} already have catalog entries. Stop the app, take a complete backup, and resolve this hostname collision before submitting again. Existing node histories are never merged automatically.`, 409);
+      }
+      throw new InputError(`This node already has data under the short hostname ${short}. Stop the app, take a complete backup, and run npm run rename-node -- ${short} ${name}. Existing short and full records are never merged automatically.`, 409);
+    }
+  }
+  function findNode(name) {
+    // Preserve exact legacy URLs, including when both names already exist.
+    const exact = find.get(name);
+    if (exact) return exact;
+    const canonical = normalizeHostname(name);
+    if (canonical !== name) return find.get(canonical);
+    const suffix = '.pulsedmedia.com';
+    if (name.endsWith(suffix)) {
+      const short = name.slice(0, -suffix.length);
+      if (!short.includes('.')) return find.get(short);
+    }
+    return undefined;
   }
   function ensureNode(record, updatedAt) {
     const file = nodeFilePath(nodeDirectory, record.serverName);
@@ -71,10 +96,10 @@ export function openDatabase(filename, { nodesPath } = {}) {
     list() { return select.all().map(publicRecord); },
     find(name) { const row = find.get(name); return row ? publicRecord(row) : null; },
     nodeDetails(name, pagination) {
-      const row = find.get(name);
+      const row = findNode(name);
       if (!row) throw new InputError('Node not found.', 404);
       const record = publicRecord(row);
-      const file = nodeFilePath(nodeDirectory, name);
+      const file = nodeFilePath(nodeDirectory, row.server_name);
       if (!existsSync(file)) {
         db.exec('BEGIN IMMEDIATE');
         try { ensureNode(record, row.updated_at); db.exec('COMMIT'); }
@@ -88,12 +113,13 @@ export function openDatabase(filename, { nodesPath } = {}) {
       // Attaching before the actual write transaction lets us explicitly set
       // the attached connection's synchronization level (not a file setting).
       db.exec('BEGIN IMMEDIATE');
-      try { initializeNodeFile(file); db.exec('COMMIT'); }
+      try { legacyConflict(record.serverName); initializeNodeFile(file); db.exec('COMMIT'); }
       catch (error) { db.exec('ROLLBACK'); throw error; }
       db.prepare('ATTACH DATABASE ? AS node_data').run(file);
       try {
         db.exec('PRAGMA node_data.synchronous=FULL; BEGIN IMMEDIATE');
         try {
+          legacyConflict(record.serverName);
           const existing = Boolean(exists.get(record.serverName));
           const now = new Date().toISOString();
           insertRecord(record, now);

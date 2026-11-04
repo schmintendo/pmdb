@@ -42,7 +42,7 @@ export function createApp({ databasePath, distPath, uploadLimit = 30, uploadWind
       const nodeRoute = url.pathname.match(/^\/api\/nodes\/([^/]+)$/);
       if (nodeRoute && req.method === 'GET') {
         let name;
-        try { name = normalizeHostname(decodeURIComponent(nodeRoute[1])); } catch { throw new InputError('Invalid node hostname.'); }
+        try { name = normalizeHostname(decodeURIComponent(nodeRoute[1]), { canonical: false }); } catch { throw new InputError('Invalid node hostname.'); }
         const positiveQuery = (key, fallback, max, min) => {
           if (!url.searchParams.has(key)) return fallback;
           const values = url.searchParams.getAll(key), text = values[0];
@@ -89,7 +89,7 @@ export function createApp({ databasePath, distPath, uploadLimit = 30, uploadWind
         let body;
         try { body = parseLimitedJson(Buffer.concat(chunks).toString('utf8')); } catch { throw new InputError('The submission is not valid JSON.'); }
         const record = url.pathname === '/api/servers/raw' ? parseRawSubmission(body) : parseSubmission(body);
-        if (!planOptions().includes(record.plan)) throw new InputError('Choose a plan from the configured list.');
+        if (record.plan != null && !planOptions().includes(record.plan)) throw new InputError('Choose a plan from the configured list.')
         const result = db.saveSubmission(record);
         return json(res, result.replaced ? 200 : 201, { ...result, serverName: record.serverName });
       }

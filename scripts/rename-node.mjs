@@ -10,7 +10,9 @@ import { normalizeHostname } from '../server/yabs.mjs';
 // Offline administrative operation: stop the app and take a complete backup
 // first. A SQL-only hostname change would leave history at the old file hash.
 export function renameNode({ databasePath, nodesPath, oldName, newName }) {
-  const oldHost = normalizeHostname(oldName), newHost = normalizeHostname(newName);
+  // Source names must remain exact: historical catalogs can contain a bare
+  // hostname whose file needs moving to the newly canonical full hostname.
+  const oldHost = normalizeHostname(oldName, { canonical: false }), newHost = normalizeHostname(newName);
   if (oldHost === newHost) throw new Error('Old and new hostnames are the same.');
   if (!existsSync(databasePath)) throw new Error('The catalog database does not exist.');
   const directory = nodesPath || join(dirname(databasePath), 'nodes');

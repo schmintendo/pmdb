@@ -35,7 +35,7 @@ test('direct rows normalize hostnames and convert explicit GiB/TiB units', () =>
   assert.equal(parsed.ramBytes, 32 * 1024 ** 3);
   assert.equal(parsed.swapBytes, 8 * 1024 ** 3);
   assert.equal(parsed.storageBytes, 4 * 1024 ** 4);
-  assert.equal(parsed.qsv, true);
+  assert.equal(parsed.qsv, false);
   assert.equal(parseRawSubmission({ ...row, ramGiB: 31.3 }).ramBytes, Math.round(31.3 * 1024 ** 3));
   assert.equal(parseRawSubmission({ ...row, storageTiB: 1.5 }).storageBytes, 1.5 * 1024 ** 4);
   const missing = parseRawSubmission({ ...row, processorMhz: undefined, swapGiB: undefined });
@@ -51,7 +51,7 @@ test('direct rows reject missing fields, coercions, unsafe numbers and extra fie
   for (const body of [null, [], [row], 'row', {}, { ...row, extra: true }, { ...row, datacenter: 'lt5' }, { ...row, yabsText }]) {
     assert.throws(() => parseRawSubmission(body));
   }
-  for (const field of ['serverName', 'processorName', 'coreCount', 'ramGiB', 'storageTiB', 'qsv']) {
+  for (const field of ['serverName', 'processorName', 'coreCount', 'ramGiB', 'storageTiB', 'username']) {
     const missing = { ...row }; delete missing[field];
     assert.throws(() => parseRawSubmission(missing), field);
   }

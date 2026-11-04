@@ -1,20 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parseYabs, parseSubmission } from '../server/yabs.mjs';
+import { normalizeHostname, parseYabs, parseSubmission } from '../server/yabs.mjs';
 import { parseRawSubmission } from '../server/raw.mjs';
 import { normalizedBenchmarks } from '../server/benchmarks.mjs';
+import { inferQuickSync } from '../server/submission.mjs';
 
 const example = JSON.parse(readFileSync(new URL('../examples/yabs-example.json', import.meta.url), 'utf8'));
 const raw = JSON.parse(readFileSync(new URL('../examples/server-row.json', import.meta.url), 'utf8'));
 const submission = { serverName: raw.serverName, username: 'Node_User', plan: 'Plan 1', userCount: 0, qsv: true, yabsText: JSON.stringify(example) };
 
-test('submissions require a consistent arbitrary identifier, plan and a strict reported user count', () => {
+test('submissions require a consistent identifier and validate optional plan and reported user count', () => {
   const parsed = parseSubmission({ ...submission, username: '  Node_User  ', plan: ' Plan 1 ' });
   assert.equal(parsed.username, 'Node_User');
   assert.equal(parsed.plan, 'Plan 1');
   assert.equal(parsed.userCount, 0);
-  for (const field of ['username', 'plan', 'userCount']) {
+  for (const field of ['username']) {
     const body = { ...submission }; delete body[field];
     assert.throws(() => parseSubmission(body), field);
     const row = { ...raw }; delete row[field];
@@ -25,9 +26,55 @@ test('submissions require a consistent arbitrary identifier, plan and a strict r
     assert.equal(parseSubmission({ ...submission, username }).username, username);
     assert.equal(parseRawSubmission({ ...raw, username }).username, username);
   }
-  for (const userCount of ['0', -1, 0.5, null, true, NaN, Infinity, 10_000_001]) assert.throws(() => parseSubmission({ ...submission, userCount }));
-  assert.throws(() => parseSubmission({ ...submission, plan: 'x'.repeat(101) }));
+  for (const field of ['plan', 'userCount']) {
+    for (const value of [undefined, null, '', '  ', '\t']) {
+      assert.equal(parseSubmission({ ...submission, [field]: value })[field], null);
+      assert.equal(parseRawSubmission({ ...raw, [field]: value })[field], null);
+    }
+  }
+  for (const userCount of ['0', '12', -1, 0.5, true, [], {}, NaN, Infinity, 10_000_001]) {
+    assert.throws(() => parseSubmission({ ...submission, userCount }));
+    assert.throws(() => parseRawSubmission({ ...raw, userCount }));
+  }
+  for (const plan of ['x'.repeat(101), 123, [], {}, true, 'bad\nplan']) {
+    assert.throws(() => parseSubmission({ ...submission, plan }));
+    assert.throws(() => parseRawSubmission({ ...raw, plan }));
+  }
+  assert.equal(parseRawSubmission({ ...raw, userCount: 0 }).userCount, 0);
   assert.throws(() => parseSubmission({ ...submission, privileged: true }));
+});
+
+test('both submission routes canonicalize bare node names and preserve complete hostnames', () => {
+  const expected = 'le4-0-105-238louhi.pulsedmedia.com';
+  for (const serverName of [' LE4-0-105-238LOUHI ', ' LE4-0-105-238LOUHI. ', expected, `${expected.toUpperCase()}.`]) {
+    assert.equal(normalizeHostname(serverName), expected);
+    assert.equal(parseSubmission({ ...submission, serverName }).serverName, expected);
+    assert.equal(parseRawSubmission({ ...raw, serverName }).serverName, expected);
+  }
+  assert.equal(normalizeHostname(' NODE.EXAMPLE.NET. '), 'node.example.net');
+  assert.equal(normalizeHostname(' NODE. ', { canonical: false }), 'node');
+  for (const serverName of ['', ' ', '.', '..', 'node..', '.node', 'node..example.com', '-node', 'node_', 'a'.repeat(64)]) {
+    assert.throws(() => normalizeHostname(serverName), serverName);
+  }
+});
+
+test('QuickSync is inferred for the Intel N100 and ignores legacy choices in both routes', () => {
+  const supported = ['Intel(R) N100', 'Intel N100', 'intel processor n100', '12th Gen Intel(R) N100 @ 3.40GHz'];
+  const unsupported = ['Intel N1000', 'Intel N100E', 'Intel AN100', 'Intel Core i7-12700', 'AMD N100', 'N100', 'IntelN100', '', null];
+  for (const processorName of supported) assert.equal(inferQuickSync(processorName), true, processorName);
+  for (const processorName of unsupported) assert.equal(inferQuickSync(processorName), false, String(processorName));
+  for (const processorName of [...supported, ...unsupported.filter(value => typeof value === 'string' && value)]) {
+    const yabsText = JSON.stringify({ ...example, cpu: { ...example.cpu, model: processorName } });
+    for (const qsv of [undefined, false, true]) {
+      const expected = supported.includes(processorName);
+      assert.equal(parseSubmission({ ...submission, yabsText, qsv }).qsv, expected);
+      assert.equal(parseRawSubmission({ ...raw, processorName, qsv }).qsv, expected);
+    }
+  }
+  for (const qsv of [null, 'true', 1, {}, []]) {
+    assert.throws(() => parseSubmission({ ...submission, qsv }));
+    assert.throws(() => parseRawSubmission({ ...raw, qsv }));
+  }
 });
 
 test('YABS output retains only allowed OS details and normalized benchmark measurements', () => {

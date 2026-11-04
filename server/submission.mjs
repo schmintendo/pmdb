@@ -12,9 +12,18 @@ export function submissionIdentity(body) {
   // This is a contributor-chosen identifier, not a verified node account.
   // Keep its original case and punctuation so existing entries still match.
   const username = boundedText(body.username, 'Submission identifier', 64);
-  const plan = boundedText(body.plan, 'Plan', 100);
-  if (!Number.isSafeInteger(body.userCount) || body.userCount < 0 || body.userCount > 10_000_000) throw new InputError('Reported user count must be an integer from 0 to 10000000.');
-  return { username, plan, userCount: body.userCount };
+  const plan = typeof body.plan === 'string' && !body.plan.trim() ? null : boundedText(body.plan, 'Plan', 100, true);
+  const userCount = body.userCount == null || (typeof body.userCount === 'string' && !body.userCount.trim()) ? null : body.userCount;
+  if (userCount !== null && (!Number.isSafeInteger(userCount) || userCount < 0 || userCount > 10_000_000)) throw new InputError('Reported user count must be an integer from 0 to 10000000.');
+  return { username, plan, userCount };
+}
+
+// Only the Intel N100 is established as supporting QuickSync in this catalog.
+// Token boundaries prevent names such as N1000 from inheriting that status.
+export function inferQuickSync(processorName) {
+  return typeof processorName === 'string'
+    && /(?:^|[^a-z0-9])intel(?=$|[^a-z0-9])/i.test(processorName)
+    && /(?:^|[^a-z0-9])n100(?=$|[^a-z0-9])/i.test(processorName);
 }
 
 export function systemInformation(value, strict = false) {

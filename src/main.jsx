@@ -58,7 +58,6 @@ function UploadDialog({ onClose, onSaved, plans }) {
   const ref = useRef(null);
   const fileInputRef = useRef(null);
   const [serverName, setServerName] = useState('');
-  const [qsv, setQsv] = useState('');
   const [file, setFile] = useState(null);
   const [username, setUsername] = useState('');
   const [plan, setPlan] = useState('');
@@ -71,15 +70,14 @@ function UploadDialog({ onClose, onSaved, plans }) {
     event.preventDefault();
     if (!file) return setError('Choose a YABS JSON or text file.');
     if (file.size > 800 * 1024) return setError('The file must be smaller than 800 KiB.');
-    if (qsv === '') return setError('Choose Yes or No for Intel QuickSync.');
     if (!username.trim()) return setError('Choose an identifier and use it for all your submissions.');
-    if (!plans.includes(plan)) return setError('Choose your Pulsed Media plan.');
-    if (userCount === '' || !Number.isSafeInteger(Number(userCount)) || Number(userCount) < 0) return setError('Enter the integer returned by the user-count command.');
+    if (plan && !plans.includes(plan)) return setError('Choose a Pulsed Media plan from the list, or leave it empty.');
+    if (userCount !== '' && (!Number.isSafeInteger(Number(userCount)) || Number(userCount) < 0)) return setError('Enter the integer returned by the user-count command, or leave it empty.');
     setBusy(true); setError('');
     try {
       const result = await api('/api/servers', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serverName, qsv: qsv === 'yes', yabsText: await file.text(), username: username.trim(), plan, userCount: Number(userCount) }),
+        body: JSON.stringify({ serverName, yabsText: await file.text(), username: username.trim(), plan: plan || null, userCount: userCount === '' ? null : Number(userCount) }),
       });
       onSaved(result);
     } catch (error) { setError(error.message); }
@@ -88,9 +86,9 @@ function UploadDialog({ onClose, onSaved, plans }) {
   return <dialog ref={ref} className="upload-dialog" aria-labelledby="upload-title" onCancel={event => { if (busy) event.preventDefault(); else onClose(); }}>
     <form onSubmit={submit}>
       <div className="dialog-heading"><div><h2 id="upload-title">Upload a server</h2><p>Import hardware details from a YABS result.</p></div><button type="button" aria-label="Close upload" onClick={onClose} disabled={busy}>×</button></div>
-      <label className="form-field">Server Name<input autoFocus required maxLength={253} value={serverName} onChange={e => setServerName(e.target.value)} placeholder="le0-000-000name.pulsedmedia.com" autoComplete="off" disabled={busy} /><small>Use the hostname. Datacenter: <strong>{dc}</strong></small></label>
+      <label className="form-field">Server Name<input autoFocus required maxLength={253} value={serverName} onChange={e => setServerName(e.target.value)} placeholder="le0-000-000name.pulsedmedia.com" autoComplete="off" disabled={busy} /><small>Use the hostname. Short names automatically receive .pulsedmedia.com. Datacenter: <strong>{dc}</strong></small></label>
       <label className="form-field">Your submission identifier<input required maxLength={64} value={username} onChange={e => setUsername(e.target.value)} autoComplete="off" placeholder="Choose a nickname or any consistent identifier" disabled={busy} /><small><strong>This does not have to be your actual username.</strong> Choose any identifier up to 64 characters and use exactly the same one for all your submissions. It is case-sensitive and not shown publicly. Reusing it updates your previous plan on this node.</small></label>
-      <label className="form-field">Pulsed Media plan<select required value={plan} onChange={e => setPlan(e.target.value)} disabled={busy}><option value="">Choose your plan…</option>{plans.map(name => <option key={name} value={name}>{name}</option>)}</select></label>
+      <label className="form-field">Pulsed Media plan (optional)<select value={plan} onChange={e => setPlan(e.target.value)} disabled={busy}><option value="">No plan supplied</option>{plans.map(name => <option key={name} value={name}>{name}</option>)}</select></label>
       <div className="form-field" role="group" aria-labelledby="yabs-results-label">
         <span id="yabs-results-label">YABS results</span>
         <input ref={fileInputRef} id="yabs-file" hidden type="file" accept=".json,.txt,.log,application/json,text/plain" aria-label="YABS results file" onChange={e => setFile(e.target.files[0] || null)} disabled={busy} />
@@ -101,10 +99,9 @@ function UploadDialog({ onClose, onSaved, plans }) {
         <CommandSnippet title="YABS JSON" command="curl -sL yabs.sh | bash -s -- -gw yabs.json" note="Includes network and disk benchmarks; skips Geekbench." />
       </div>
       <div className="user-count-section">
-        <CommandSnippet title="Count node users" command={"awk -F: '$3 > 1000 {n++} END {print n+0}' /etc/passwd"} note="Counts /etc/passwd entries with UID greater than 1000, including any service accounts in that range." />
-        <label className="form-field">Number of users<input required type="number" min="0" max="10000000" step="1" inputMode="numeric" value={userCount} onChange={e => setUserCount(e.target.value)} placeholder="Paste the integer returned above" disabled={busy} /></label>
+        <CommandSnippet title="Count node users" command={"awk -F: '$3 > 1000 && $3 != 65534 {n++} END {print n+0}' /etc/passwd"} note="Counts /etc/passwd entries with UID greater than 1000, excluding nobody (UID 65534)." />
+        <label className="form-field">Number of users (optional)<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={userCount} onChange={e => setUserCount(e.target.value)} placeholder="Paste the integer returned above, or leave empty" disabled={busy} /></label>
       </div>
-      <label className="form-field">Intel QuickSync<select required value={qsv} onChange={e => setQsv(e.target.value)} disabled={busy}><option value="">Choose manually…</option><option value="yes">Yes</option><option value="no">No</option></select><small>Provided by you; this is not inferred from the processor name.</small></label>
       {error && <p className="error-box" role="alert">{error}</p>}
       <div className="dialog-actions"><button type="button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save server'}</button></div>
     </form>
@@ -157,7 +154,7 @@ function App() {
       <section className="stats" aria-label="Catalog overview">
         <div><span>Servers</span><strong>{data.length}<small>in the catalog</small></strong></div>
         <div><span>Datacenters</span><strong>{datacenters.filter(dc => dc !== 'Unknown').length}<small>from hostnames</small></strong></div>
-        <div><span>Intel QuickSync enabled</span><strong>{data.filter(row => row.qsv).length}<small>manually reported</small></strong></div>
+        <div><span>Intel QuickSync enabled</span><strong>{data.filter(row => row.qsv).length}<small>inferred from processor names</small></strong></div>
         <button className="primary upload-button" onClick={() => { setNotice(''); setUploadOpen(true); }} disabled={!uploadsEnabled}>＋ Upload YABS</button>
       </section>
       {notice && <p className="success-box" role="status">{notice}</p>}
@@ -179,7 +176,7 @@ function App() {
         </div>
         <footer className="pagination"><span role="status">{count ? `${pagination.pageIndex * pagination.pageSize + 1}–${pagination.pageIndex * pagination.pageSize + rows.length}` : '0'} of {count} servers</span><div className="page-controls"><label htmlFor="page-size">Rows per page</label><select id="page-size" value={pagination.pageSize} onChange={e => table.setPageSize(Number(e.target.value))}>{[10, 25, 50, 100].map(size => <option key={size} value={size}>{size}</option>)}</select><span>Page {count ? pagination.pageIndex + 1 : 0} of {table.getPageCount()}</span><button aria-label="Previous page" disabled={!table.getCanPreviousPage()} onClick={() => table.previousPage()}>←</button><button aria-label="Next page" disabled={!table.getCanNextPage()} onClick={() => table.nextPage()}>→</button></div></footer>
       </section>
-      <footer className="page-footer"><span>All values, except for Intel QuickSync, as reported by YABS</span><span>{!loading && !uploadsEnabled ? 'Uploads are currently unavailable.' : 'Blatantly vibe-coded by schmintendo.'}</span></footer>
+      <footer className="page-footer"><span>Hardware as reported by YABS; Intel QuickSync inferred from processor names</span><span>{!loading && !uploadsEnabled ? 'Uploads are currently unavailable.' : 'Blatantly vibe-coded by schmintendo.'}</span></footer>
     </main>
     {uploadOpen && <UploadDialog onClose={() => setUploadOpen(false)} onSaved={saved} plans={plans} />}
   </div>;

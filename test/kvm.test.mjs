@@ -42,7 +42,7 @@ test('raw KVM field accepts explicit booleans and keeps older clients compatible
   for (const kvm of ['KVM', 'NONE', 'true', 'false', 0, 1, [], {}]) assert.throws(() => parseRawSubmission({ ...raw, kvm }));
 });
 
-test('KVM migration preserves existing hardware, swap, QuickSync and timestamps', () => {
+test('KVM migration preserves existing hardware, swap and timestamps and derives QuickSync', () => {
   const directory = mkdtempSync(join(tmpdir(), 'pmdb-kvm-migrate-'));
   const filename = join(directory, 'servers.sqlite');
   let db;
@@ -62,7 +62,7 @@ test('KVM migration preserves existing hardware, swap, QuickSync and timestamps'
     assert.deepEqual(db.list(), [{
       serverName: raw.serverName, processorName: 'Original CPU', coreCount: 4,
       processorMhz: 2000, ramBytes: 8 * 1024 ** 3, storageBytes: 1024 ** 4,
-      swapBytes: 2 * 1024 ** 3, qsv: true, datacenter: 'le4', kvm: null,
+      swapBytes: 2 * 1024 ** 3, qsv: false, datacenter: 'le4', kvm: null,
     }]);
     db.close(); db = openDatabase(filename);
     assert.equal(db.list()[0].kvm, null); // Reopening an already-migrated DB is safe.

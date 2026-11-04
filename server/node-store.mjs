@@ -26,7 +26,7 @@ export function initializeNodeFile(filename, initialRecord = null) {
       ) STRICT;
       CREATE TABLE IF NOT EXISTS participants (
         username TEXT PRIMARY KEY,
-        plan TEXT NOT NULL,
+        plan TEXT,
         updated_at TEXT NOT NULL
       ) STRICT;
       CREATE TABLE IF NOT EXISTS benchmark_runs (
@@ -39,6 +39,16 @@ export function initializeNodeFile(filename, initialRecord = null) {
         disk_json TEXT NOT NULL,
         UNIQUE(username, fingerprint)
       ) STRICT;`);
+    if (db.prepare('PRAGMA table_info(participants)').all().find(column => column.name === 'plan')?.notnull) {
+      // Earlier versions required a plan. Retain every contributor and run
+      // while allowing an identifier to contribute without knowing its plan.
+      db.exec(`BEGIN IMMEDIATE;
+        ALTER TABLE participants RENAME TO participants_required_plan;
+        CREATE TABLE participants (username TEXT PRIMARY KEY, plan TEXT, updated_at TEXT NOT NULL) STRICT;
+        INSERT INTO participants SELECT username, plan, updated_at FROM participants_required_plan;
+        DROP TABLE participants_required_plan;
+        COMMIT;`);
+    }
     if (initialRecord) {
       db.prepare(`INSERT OR IGNORE INTO node_state VALUES (1, ?, NULL, '{}', ?, ?)`)
         .run(initialRecord.serverName, JSON.stringify(initialRecord), initialRecord.updatedAt);
@@ -56,12 +66,12 @@ export function prepareNodeDirectory(directory) {
 export function writeNodeSubmission(db, record, now) {
   db.prepare(`INSERT INTO node_data.node_state VALUES (1, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET server_name=excluded.server_name,
-    user_count=excluded.user_count, system_json=excluded.system_json,
+    user_count=COALESCE(excluded.user_count, node_state.user_count), system_json=excluded.system_json,
     record_json=excluded.record_json, updated_at=excluded.updated_at`)
-    .run(record.serverName, record.userCount, JSON.stringify(record.system || {}), JSON.stringify(record), now);
+    .run(record.serverName, record.userCount ?? null, JSON.stringify(record.system || {}), JSON.stringify(record), now);
   db.prepare(`INSERT INTO node_data.participants VALUES (?, ?, ?)
-    ON CONFLICT(username) DO UPDATE SET plan=excluded.plan, updated_at=excluded.updated_at`)
-    .run(record.username, record.plan, now);
+    ON CONFLICT(username) DO UPDATE SET plan=COALESCE(excluded.plan, participants.plan), updated_at=excluded.updated_at`)
+    .run(record.username, record.plan ?? null, now);
   const benchmarks = record.benchmarks || {};
   const speed = benchmarks.speedTests || [];
   const disk = benchmarks.diskIo || [];
@@ -80,7 +90,7 @@ export function readNodePage(filename, server, { limit = 20, offset = 0 } = {}) 
   try {
     db.exec('PRAGMA busy_timeout=5000; PRAGMA trusted_schema=OFF; BEGIN');
     const state = db.prepare('SELECT * FROM node_state WHERE id=1').get();
-    const plans = db.prepare('SELECT plan AS name, count(*) AS count FROM participants GROUP BY plan ORDER BY count(*) DESC, plan').all();
+    const plans = db.prepare('SELECT plan AS name, count(*) AS count FROM participants WHERE plan IS NOT NULL GROUP BY plan ORDER BY count(*) DESC, plan').all();
     const contributors = db.prepare('SELECT count(*) AS total FROM participants').get().total;
     const totalRuns = db.prepare('SELECT count(*) AS total FROM benchmark_runs').get().total;
     const runs = db.prepare('SELECT id, measured_at, submitted_at, speed_json, disk_json FROM benchmark_runs ORDER BY id DESC LIMIT ? OFFSET ?').all(limit, offset);
