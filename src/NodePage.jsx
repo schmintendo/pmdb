@@ -4,6 +4,12 @@ import { appendRuns, DISK_BLOCKS, diskBlock, diskSpeed, endpointKey, networkEndp
 const format = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
 const size = (value, unit) => value == null ? '—' : `${format.format(value / 1024 ** (unit === 'TiB' ? 4 : 3))} ${unit}`;
 const display = value => value == null || value === '' ? '—' : value;
+function datacenterLabel(datacenter, hostname) {
+  const label = datacenter || 'Unknown';
+  const prefix = label === 'Unknown' ? hostname : label;
+  const location = /^[l\d]/i.test(prefix) ? 'Lauttasaari' : /^k/i.test(prefix) ? 'Kerava' : '';
+  return location ? `${label} (${location})` : label;
+}
 function friendlyName(hostname) {
   return hostname.match(/^[^-]+-(?:\d+-)*\d+([a-z][a-z0-9-]*)(?:\..+)?$/i)?.[1] || hostname.split('.')[0] || 'Node';
 }
@@ -188,7 +194,7 @@ export default function NodePage({ hostname }) {
           <div className="node-heading"><div><span className="node-eyebrow">NODE DETAILS</span><h1 id="node-name">{data.friendlyName || friendlyName(server.serverName)}</h1><p className="node-hostname">{server.serverName}</p></div><div className="node-user-count"><span>Number of users</span><strong>{data.userCount == null ? '—' : format.format(data.userCount)}</strong></div></div>
           <div className="node-system-grid">
             <section aria-label="Hardware"><h2>System information</h2><Measurements rows={[
-              ['Datacenter', server.datacenter], ['Processor', server.processorName],
+              ['Datacenter', datacenterLabel(server.datacenter, server.serverName)], ['Processor', server.processorName],
               ['Core count', server.coreCount], ['KVM', server.kvm == null ? '— Unknown' : server.kvm ? '✓ KVM' : '× NONE'],
               ['Processor MHz', server.processorMhz == null ? '—' : format.format(server.processorMhz)],
               ['RAM', size(server.ramBytes, 'GiB')], ['SWAP', size(server.swapBytes, 'GiB')],
