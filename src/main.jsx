@@ -85,7 +85,7 @@ function UploadDialog({ onClose, onSaved, plans }) {
     } catch (error) { setError(error.message); }
     finally { setBusy(false); }
   }
-  return <dialog ref={ref} className="upload-dialog" aria-labelledby="upload-title" onCancel={event => { if (busy) event.preventDefault(); else onClose(); }}>
+  return <dialog ref={ref} className="upload-dialog" aria-labelledby="upload-title" onCancel={event => { if (event.target !== event.currentTarget) return; if (busy) event.preventDefault(); else onClose();}}>
     <form onSubmit={submit}>
       <div className="dialog-heading"><div><h2 id="upload-title">Upload a server</h2><p>Import hardware details from a YABS result.</p></div><button type="button" aria-label="Close upload" onClick={onClose} disabled={busy}>×</button></div>
       <label className="form-field">Server Name<input autoFocus required maxLength={253} value={serverName} onChange={e => setServerName(e.target.value)} placeholder="le0-000-000name.pulsedmedia.com" autoComplete="off" disabled={busy} /><small>Use the hostname. Short names automatically receive .pulsedmedia.com. Datacenter: <strong>{dc}</strong></small></label>
